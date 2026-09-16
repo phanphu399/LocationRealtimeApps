@@ -1,4 +1,4 @@
 // Root build.gradle - khai báo Plugin version dùng chung cho toàn dự án
 plugins {
-    id 'com.android.application' version '8.4.0' apply false
+    id 'com.android.application' version '8.5.2' apply false
 }

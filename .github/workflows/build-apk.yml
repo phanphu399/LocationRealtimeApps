@@ -24,7 +24,7 @@ jobs:
           java-version: '17'
 
       # 3. Android SDK đã được cài SẴN trên ubuntu-latest (ANDROID_HOME có sẵn).
-      #    Chỉ đảm bảo đủ platform-34 + build-tools-34 cho AGP 8.4 + compileSdk 34.
+      #    Chỉ đảm bảo đủ platform-35 + build-tools-35.0.0 cho AGP 8.5 + compileSdk 35.
       #    (KHÔNG dùng android-actions/setup-android@v2 vì action này bị lỗi
       #     "Failed to find package 'tools'" - package đã bị Google gỡ bỏ)
       - name: Verify / install Android SDK packages
@@ -35,7 +35,7 @@ jobs:
           echo "sdkmanager=$SDK_MANAGER"
           if [ -n "$SDK_MANAGER" ]; then
             yes | "$SDK_MANAGER" --licenses >/dev/null 2>&1 || true
-            "$SDK_MANAGER" "platforms;android-34" "build-tools;34.0.0" >/dev/null 2>&1 || true
+            "$SDK_MANAGER" "platforms;android-35" "build-tools;35.0.0" >/dev/null 2>&1 || true
           fi
           echo "Android SDK ready (AGP sẽ tự tải phần còn thiếu nếu cần)"
 
