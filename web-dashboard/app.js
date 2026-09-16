@@ -71,6 +71,7 @@ const deviceData = {};
 const addressCache = new Map();
 const geocodeTimestamps = {};
 let lastFitTime = 0;
+let showSimulated = false;
 
 /* ============================================================ */
 /*  DOM REFS                                                     */
@@ -98,6 +99,7 @@ const btnFitMap       = $("btnFitMap");
 const btnToggle       = $("btnToggle");
 const overlay         = $("overlay");
 const sidebar         = $("sidebar");
+const cbSimDevices    = $("cbSimDevices");
 
 /* ============================================================ */
 /*  REVERSE GEOCODING (Nominatim)                                */
@@ -152,6 +154,15 @@ btnToggle.addEventListener('click', () => {
 });
 
 overlay.addEventListener('click', closeSidebar);
+
+// Toggle hiện/ẩn thiết bị mô phỏng (python)
+cbSimDevices.addEventListener('change', () => {
+  showSimulated = cbSimDevices.checked;
+  if (!showSimulated) {
+    removeSimulatedMarkers();
+  }
+  renderDeviceList();
+});
 
 /* ============================================================ */
 /*  FIREBASE CONNECTION STATUS                                   */
@@ -272,7 +283,14 @@ onValue(deviceRef, (snapshot) => {
     return;
   }
 
+  // Loại bỏ dữ liệu của thiết bị mô phỏng (device_python_*) nếu chưa bật toggle
+  const visibleData = {};
   for (const [deviceId, device] of Object.entries(data)) {
+    if (!showSimulated && deviceId.includes("python")) continue;
+    visibleData[deviceId] = device;
+  }
+
+  for (const [deviceId, device] of Object.entries(visibleData)) {
     if (device.lat == null || device.lng == null) continue;
 
     const existed = !!deviceData[deviceId];
@@ -293,10 +311,29 @@ onValue(deviceRef, (snapshot) => {
     }
   }
 
+  // Xóa marker của thiết bị mô phỏng khỏi bản đồ khi ẩn
+  if (!showSimulated) {
+    removeSimulatedMarkers();
+  }
+
   renderDeviceList();
   updateDetailCard();
   updateDistances();
 });
+
+function isSimulatedDevice(deviceId) {
+  return deviceId.toLowerCase().includes("python");
+}
+
+function removeSimulatedMarkers() {
+  for (const [deviceId, marker] of Object.entries(deviceMarkers)) {
+    if (isSimulatedDevice(deviceId)) {
+      map.removeLayer(marker);
+      delete deviceMarkers[deviceId];
+      delete renderedDevicePos[deviceId];
+    }
+  }
+}
 
 function autoFitNewDevice(deviceId) {
   const d = deviceData[deviceId];
@@ -334,7 +371,7 @@ function upsertDeviceMarker(deviceId) {
     return;
   }
 
-  const isPython = deviceId.includes("python");
+  const isPython = isSimulatedDevice(deviceId);
   const icon = L.divIcon({
     className: "leaflet-div-icon",
     html: `<div class="device-pin">
@@ -369,12 +406,13 @@ async function buildPopup(deviceId) {
 /* ============================================================ */
 
 function renderDeviceList() {
-  const ids = Object.keys(deviceData);
+  const ids = Object.keys(deviceData).filter(id => !isSimulatedDevice(id) || showSimulated);
   listEmpty.style.display = ids.length ? "none" : "block";
   deviceList.innerHTML = "";
 
   const now = Date.now();
-  for (const [deviceId, d] of Object.entries(deviceData)) {
+  for (const deviceId of ids) {
+    const d = deviceData[deviceId];
     const fresh = now - d.ts < DEVICE_TTL_MS;
     const ageSec = Math.max(0, Math.floor((now - d.ts) / 1000));
     const dist = myPos ? fmtDistance(haversine(myPos, [d.lat, d.lng])) : "--";

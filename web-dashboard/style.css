@@ -241,6 +241,24 @@ html, body {
   border-radius: 20px;
 }
 
+.sim-toggle {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--gray-500);
+  cursor: pointer;
+  user-select: none;
+}
+
+.sim-toggle input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--blue-500);
+  cursor: pointer;
+}
+
 /* ===================== MY LOCATION CARD ===================== */
 
 .my-location-card {
