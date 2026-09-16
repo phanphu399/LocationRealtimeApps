@@ -47,7 +47,7 @@ const map = L.map("map", {
   center: [10.762622, 106.660172],
   zoom: 13,
   zoomControl: false,
-  layers: [cartoLight]
+  layers: [osmLayer]
 });
 
 L.control.zoom({ position: "bottomright" }).addTo(map);
@@ -196,15 +196,6 @@ overlay.addEventListener('click', () => {
   btnToggle.classList.remove('active');
 });
 
-// Toggle hiện/ẩn thiết bị mô phỏng
-cbSimDevices.addEventListener('change', () => {
-  showSimulated = cbSimDevices.checked;
-  if (!showSimulated) {
-    removeSimulatedMarkers();
-  }
-  renderDeviceList();
-});
-
 /* ============================================================ */
 /*  FIREBASE CONNECTION STATUS                                   */
 /* ============================================================ */
@@ -309,10 +300,18 @@ function initGeolocation() {
     myAccuracy.textContent = "Trình duyệt không hỗ trợ định vị";
     return;
   }
+  // Buộc thiết bị lấy fix GPS mới nhất: bỏ cache (maximumAge=0) để vị trí chính xác nhất.
   navigator.geolocation.watchPosition(onGeoSuccess, onGeoError, {
     enableHighAccuracy: true,
-    maximumAge: 10000,
-    timeout: 20000
+    maximumAge: 0,
+    timeout: 10000
+  });
+
+  // Lấy ngay một fix chính xác nhất để hiển thị nhanh hơn khi mở trang.
+  navigator.geolocation.getCurrentPosition(onGeoSuccess, onGeoError, {
+    enableHighAccuracy: true,
+    maximumAge: 0,
+    timeout: 10000
   });
 }
 
@@ -407,9 +406,10 @@ onValue(deviceRef, (snapshot) => {
       history: existed ? deviceData[deviceId].history : []
     };
 
-    // Lưu lịch sử lộ trình (polyline)
+    // Lưu lịch sử lộ trình (polyline) — sim dùng ngưỡng nhỏ để giữ liền mạch tuyến
     const h = deviceData[deviceId].history;
-    if (!h.length || haversine(h[h.length - 1], [deviceData[deviceId].lat, deviceData[deviceId].lng]) > MIN_STEP_M) {
+    const histT = isSimulatedDevice(deviceId) ? 0.5 : MIN_STEP_M;
+    if (!h.length || haversine(h[h.length - 1], [deviceData[deviceId].lat, deviceData[deviceId].lng]) > histT) {
       h.push([deviceData[deviceId].lat, deviceData[deviceId].lng]);
       if (h.length > MAX_HISTORY) h.shift();
     }
@@ -541,10 +541,12 @@ function buildDeviceIcon(deviceId) {
 function upsertDeviceMarker(deviceId) {
   const d = deviceData[deviceId];
   const latLng = [d.lat, d.lng];
+  // Sim thiết bị mô phỏng: không bị nhiễu GPS nên cho phép cập nhật mượt ở ngưỡng nhỏ
+  const moveT = isSimulatedDevice(deviceId) ? 0.5 : MIN_STEP_M;
 
   if (deviceMarkers[deviceId]) {
     const prev = renderedDevicePos[deviceId];
-    if (prev && haversine(prev, latLng) < MIN_STEP_M) return;
+    if (prev && haversine(prev, latLng) < moveT) return;
     renderedDevicePos[deviceId] = latLng;
     deviceMarkers[deviceId].setLatLng(latLng).setIcon(buildDeviceIcon(deviceId));
     buildPopup(deviceId).then(html => deviceMarkers[deviceId].setPopupContent(html));
@@ -722,9 +724,18 @@ function fmtDistance(m) {
 }
 
 function updateDistances() {
-  if (!myPos) return;
   const d = deviceData[targetDeviceId];
-  if (d) statDistance.textContent = fmtDistance(haversine(myPos, [d.lat, d.lng]));
+  if (!d) return;
+  statDistance.textContent = fmtDistance(traveledDistance(d));
+}
+
+// Tổng quãng đường đã đi = tổng các đoạn trên lộ trình thực tế (breadcrumb)
+function traveledDistance(d) {
+  let total = 0;
+  for (let i = 1; i < d.history.length; i++) {
+    total += haversine(d.history[i - 1], d.history[i]);
+  }
+  return total;
 }
 
 /* ============================================================ */
@@ -775,54 +786,207 @@ btnPlaySound.addEventListener('click', () => sendCommand("PLAY_SOUND", btnPlaySo
 btnVolumeUp.addEventListener('click', () => sendCommand("VOLUME_UP", btnVolumeUp));
 
 /* ============================================================ */
-/*  SIMULATION MODE (test when no real device)                   */
+/*  SIMULATION MODE — routing dọc tuyến đường thực tế (OSRM)     */
 /* ============================================================ */
 
 const SIM_DEVICE = "sim_demo_01";
 const SIM_CENTER = [10.762622, 106.660172];
-let simHeadingRad = 0;
+const SIM_SPEED = { driving: 45, motorcycle: 45, walking: 5, cycling: 20 }; // km/h
+const SIM_PROFILE = { driving: "driving", walking: "walking", cycling: "cycling" };
 
-function startSimulation() {
-  if (simTimer) return;
+let simState = "idle";     // idle | pick | busy | running | done
+let simMode = "driving";
+let simSpeed = SIM_SPEED.driving;
+let simCur = null;         // [lat,lng] vị trí hiện tại trên tuyến
+let simRoute = null;       // [[lat,lng],...] điểm tuyến OSRM trả về
+let simIdx = 0;
+let simDistTotal = 0;      // tổng quãng đường tuyến (m)
+let simBattery = 95;
+let simDest = null;
+let simRouteLayer = null;
+
+const simModeLabel = { driving: "Ô tô/xe máy", walking: "Đi bộ", cycling: "Xe đạp" };
+
+// ---- Gọi OSRM tính tuyến đường ngắn nhất ----
+async function fetchOsrmRoute(start, end, mode) {
+  const profile = SIM_PROFILE[mode] || "driving";
+  const coords = `${start[1]},${start[0]};${end[1]},${end[0]}`;
+  const url = `https://router.project-osrm.org/route/v1/${profile}/${coords}?overview=full&geometries=geojson&alternatives=false&steps=false`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`OSRM HTTP ${resp.status}`);
+  const data = await resp.json();
+  if (data.code !== "Ok" || !data.routes?.length) throw new Error("Không tìm thấy tuyến đường");
+  const r = data.routes[0];
+  return {
+    points: r.geometry.coordinates.map(c => [c[1], c[0]]),
+    distance: r.distance,   // mét
+    duration: r.duration    // giây
+  };
+}
+
+// ---- Vẽ/xóa tuyến mô phỏng trên map ----
+function drawSimRoute(points) {
+  clearSimRouteLayer();
+  simRouteLayer = L.layerGroup([
+    L.polyline(points, { color: "#7b1fa2", weight: 4, opacity: 0.85, dashArray: "8 6" }),
+    L.circleMarker(simDest, { radius: 8, color: "#fff", weight: 2, fillColor: "#7b1fa2", fillOpacity: 1 })
+      .bindPopup("<b>Điểm đến</b><br>" + fmtDistance(simDistTotal))
+  ]).addTo(map);
+}
+
+function clearSimRouteLayer() {
+  if (simRouteLayer) { map.removeLayer(simRouteLayer); simRouteLayer = null; }
+}
+
+// ---- Chọn chế độ xe ----
+const simModeEl = $("simMode");
+const simStatusEl = $("simStatus");
+
+function setSimMode(mode) {
+  simMode = mode;
+  simSpeed = SIM_SPEED[mode] || SIM_SPEED.driving;
+  if (simModeEl) simModeEl.value = mode;
+}
+if (simModeEl) simModeEl.addEventListener("change", e => setSimMode(e.target.value));
+
+// ---- Bước 1: Nhấn nút → vào chế độ chọn điểm đến ----
+function startPick() {
+  clearSimRoute();
+  simState = "pick";
+  btnSimulate.disabled = false;
   btnSimulate.classList.add("active");
-  btnSimulate.textContent = "Đang mô phỏng...";
-  showSimulated = true;
-  cbSimDevices.checked = true;
-
-  simHeadingRad = Math.random() * Math.PI * 2;
-  let sLat = SIM_CENTER[0];
-  let sLng = SIM_CENTER[1];
-
-  simTimer = setInterval(() => {
-    simHeadingRad += (Math.random() - 0.5) * 0.6;
-    sLat += Math.cos(simHeadingRad) * 0.0005;
-    sLng += Math.sin(simHeadingRad) * 0.0005;
-    set(ref(db, `devices/${SIM_DEVICE}`), {
-      lat: sLat,
-      lng: sLng,
-      timestamp: Math.floor(Date.now() / 1000),
-      battery: 55 + Math.floor(Math.random() * 40),
-      speed: (Math.random() * 40).toFixed(1),
-      command: "NONE"
-    }).catch(() => {});
-  }, 2000);
+  btnSimulate.querySelector("span").textContent = "Huỷ chọn điểm đến";
+  simStatusEl.textContent = "Tap điểm đến trên bản đồ — hệ thống tính tuyến ngắn nhất theo đường thực tế";
 }
 
-function stopSimulation() {
-  if (!simTimer) return;
-  clearInterval(simTimer);
-  simTimer = null;
+function clearSimRoute() {
+  if (simTimer) { clearInterval(simTimer); simTimer = null; }
+  clearSimRouteLayer();
+  simRoute = null; simIdx = 0; simDistTotal = 0; simCur = null; simDest = null;
+  simState = "idle";
+  btnSimulate.disabled = false;
   btnSimulate.classList.remove("active");
-  btnSimulate.textContent = "Mô phỏng di chuyển";
-  remove(ref(db, `devices/${SIM_DEVICE}`)).catch(() => {});
+  btnSimulate.querySelector("span").textContent = "Mô phỏng tuyến đường";
+  simStatusEl.textContent = "";
 }
 
-btnSimulate.addEventListener("click", () => {
-  if (simTimer) {
-    stopSimulation();
-  } else {
-    startSimulation();
+// ---- Bước 2: Click trên map → lấy điểm đến, gọi OSRM, bắt đầu di chuyển ----
+map.on("click", (e) => {
+  if (simState !== "pick") return;
+  simDest = [e.latlng.lat, e.latlng.lng];
+  beginSimulation();
+});
+
+async function beginSimulation() {
+  simState = "busy";
+  btnSimulate.disabled = true;
+  simStatusEl.textContent = `Đang tính tuyến ${simModeLabel[simMode] || "ô tô"}...`;
+
+  const start = simCur
+    || (deviceData[SIM_DEVICE] ? [deviceData[SIM_DEVICE].lat, deviceData[SIM_DEVICE].lng] : null)
+    || myPos
+    || SIM_CENTER;
+
+  try {
+    const route = await fetchOsrmRoute(start, simDest, simMode);
+    simRoute = route.points;
+    simDistTotal = route.distance;
+    simIdx = 0;
+    simCur = [...start];
+    simBattery = 90 + Math.floor(Math.random() * 10);
+    simState = "running";
+    showSimulated = true;
+    cbSimDevices.checked = true;
+
+    drawSimRoute(simRoute);
+    try { map.fitBounds(L.latLngBounds(simRoute), { padding: [40, 40], maxZoom: 16 }); } catch (_) {}
+
+    btnSimulate.disabled = false;
+    btnSimulate.querySelector("span").textContent = "Dừng mô phỏng";
+    simStatusEl.textContent = `Tuyến ${simModeLabel[simMode] || "ô tô"} · ${fmtDistance(simDistTotal)} — đang di chuyển...`;
+    writeSimPoint(simCur);
+
+    simTimer = setInterval(simTick, 2000);
+  } catch (err) {
+    simStatusEl.textContent = "Không tính được tuyến: " + (err.message || err);
+    clearSimRoute();
   }
+}
+
+// ---- Bước 3: Mỗi 2 giây di chuyển dọc tuyến theo tốc độ phương tiện ----
+function simTick() {
+  if (simState !== "running" || !simRoute) return;
+  const dt = 2; // giây mỗi bước
+  const speedMs = simSpeed / 3.6;
+  let remaining = speedMs * dt;
+  const n = simRoute.length;
+
+  while (remaining > 0 && simIdx < n - 1) {
+    const a = simRoute[simIdx], b = simRoute[simIdx + 1];
+    const seg = haversine(a, b);
+    if (seg <= 0) { simIdx++; continue; }
+    if (remaining >= seg) { remaining -= seg; simIdx++; }
+    else {
+      const t = remaining / seg;
+      simCur = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+      remaining = 0;
+    }
+  }
+
+  if (simIdx >= n - 1) {
+    simCur = [...simRoute[n - 1]];
+    writeSimPoint(simCur);
+    finishSimulation();
+    return;
+  }
+
+  writeSimPoint(simCur);
+  const doneM = distAlong(simRoute, simIdx, simCur);
+  const pct = Math.min(100, Math.round((doneM / simDistTotal) * 100));
+  simStatusEl.textContent = `${simModeLabel[simMode] || "ô tô"} · ${fmtDistance(simDistTotal)} · ${pct}% · ${simSpeed} km/h`;
+}
+
+function distAlong(pts, idx, cur) {
+  let s = 0;
+  for (let i = 0; i < idx && i < pts.length - 1; i++) s += haversine(pts[i], pts[i + 1]);
+  if (idx < pts.length) s += haversine(pts[idx], cur);
+  return s;
+}
+
+function writeSimPoint(pos) {
+  simBattery = Math.max(0, simBattery - 0.01);
+  const pt = Array.isArray(pos) ? pos : [pos.lat, pos.lng];
+  set(ref(db, `devices/${SIM_DEVICE}`), {
+    lat: Math.round(pt[0] * 1e6) / 1e6,
+    lng: Math.round(pt[1] * 1e6) / 1e6,
+    timestamp: Math.floor(Date.now() / 1000),
+    battery: Math.round(simBattery),
+    speed: Math.round(simSpeed * 10) / 10,
+    command: "NONE"
+  }).catch(() => {});
+}
+
+function finishSimulation() {
+  if (simTimer) { clearInterval(simTimer); simTimer = null; }
+  simState = "done";
+  btnSimulate.disabled = false;
+  btnSimulate.classList.remove("active");
+  btnSimulate.querySelector("span").textContent = "Mô phỏng tuyến mới";
+  simStatusEl.textContent = `Đã đến nơi · ${fmtDistance(simDistTotal)} — tap bản đồ để chọn tuyến mới`;
+}
+
+// ---- Nút bấm ----
+btnSimulate.addEventListener("click", () => {
+  if (simState === "pick" || simState === "busy") { clearSimRoute(); return; }
+  startPick();
+});
+
+// ---- Đảm bảo toggle hiện thiết bị mô phỏng khi đang chạy ----
+cbSimDevices.addEventListener("change", () => {
+  showSimulated = cbSimDevices.checked;
+  if (!showSimulated && simState === "running") { showSimulated = true; cbSimDevices.checked = true; }
+  if (!showSimulated) removeSimulatedMarkers();
+  renderDeviceList();
 });
 
 /* ============================================================ */

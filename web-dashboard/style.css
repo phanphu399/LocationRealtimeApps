@@ -399,6 +399,17 @@ html, body {
   .sheet-header { padding-top: 20px; }
 }
 
+/* Sim box */
+.sim-box { border-top: 1px solid var(--border); padding-top: 12px; }
+.sim-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.sim-label { font-size: 12px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+.sim-select {
+  flex: 1; padding: 8px 10px; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--surface-2); color: var(--text);
+  font-size: 13px; font-weight: 600;
+}
+.sim-status { font-size: 12px; color: var(--muted); margin-top: 6px; min-height: 16px; line-height: 1.4; }
+
 /* Install button — visible when PWA available */
 #btnInstall { display: none; }
 .mtb-btn.install { color: var(--blue); }

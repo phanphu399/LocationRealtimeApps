@@ -48,10 +48,11 @@ Hệ thống theo dõi vị trí GPS theo thời gian thực (real-time): thiế
 
 | Thành phần | Công nghệ | Vai trò |
 |---|---|---|
-| Map | **Leaflet 1.9** + nhiều lớp tile (CARTO Positron sáng, Voyager, OSM, vệ tinh Esri) | Hiển thị bản đồ, marker, polyline |
+| Map | **Leaflet 1.9** + nhiều lớp tile (OSM đường phố mặc định, CARTO Positron sáng, Voyager, vệ tinh Esri) | Hiển thị bản đồ, marker, polyline |
 | Realtime DB | **Firebase Realtime Database** (WebSocket push) | Đồng bộ vị trí real-time 2 chiều |
 | Reverse geocode | **Nominatim OSM API** (cache + debounce 10s) | Địa chỉ tiếng Việt cho marker |
-| Geolocation (web) | **Browser Geolocation API** (`watchPosition`, high accuracy) | Hiển thị "bạn đang ở đâu" |
+| Routing | **OSRM Public API** (`router.project-osrm.org`, profile: driving/walking/cycling) | Mô phỏng di chuyển dọc tuyến đường ngắn nhất thực tế |
+| Geolocation (web) | **Browser Geolocation API** (`watchPosition`, high accuracy, `maximumAge=0`) | Hiển thị "bạn đang ở đâu" |
 | Geolocation (Android) | **FusedLocationProviderClient** (`PRIORITY_HIGH_ACCURACY`, 5s) | Tọa độ GPS điện thoại |
 | Android Background | **Foreground Service** (START_STICKY) + battery-optimization whitelist | Chạy ngầm, không bị kill |
 | Web App | **PWA** (manifest + Service Worker, cache-first offline) | Cài đặt lên màn hình chính Android/iOS |
@@ -67,7 +68,7 @@ location_app_realtime/
 │   ├── index.html                 # Giao diện (sidebar / bottom-sheet mobile)
 │   ├── style.css                  # Theme sáng hiện đại, responsive
 │   ├── app.js                     # Firebase SDK + Leaflet + logic realtime
-│   ├── sw.js                      # Service Worker (offline cache, cache v4)
+│   ├── sw.js                      # Service Worker (offline cache, cache v6)
 │   ├── manifest.json              # PWA (standalone, icons 192/512 maskable)
 │   └── icons/                     # icon-180/192/512.png, favicon.png
 ├── android-client/                # Android (Java)
@@ -115,7 +116,7 @@ python background-tracker/tracker.py
 ```
 Tạo thiết bị ảo `device_python_01` đi ngẫu nhiên — thành phần này **mặc định tắt** khi chạy `start.py` để không làm nhiễu bản đồ thật.
 
-> 💡 Không có điện thoại? Bấm nút **"Mô phỏng di chuyển"** ngay trên dashboard (web) để tạo thiết bị ảo `sim_demo_01`.
+> 💡 Không có điện thoại? Bấm **"Mô phỏng tuyến đường"** trên dashboard → tap điểm đến trên bản đồ → thiết bị ảo `sim_demo_01` di chuyển dọc tuyến đường ngắn nhất theo phương tiện đã chọn (ô tô/xe máy, đi bộ, xe đạp) qua **OSRM routing**.
 
 ---
 
@@ -143,22 +144,26 @@ Tạo thiết bị ảo `device_python_01` đi ngẫu nhiên — thành phần n
 |---|---|
 | `web-dashboard/app.js` | `firebaseConfig` (apiKey, databaseURL, projectId, appId) |
 | `android-client/.../FirebaseConfig.java` | `API_KEY`, `DATABASE_URL`, `PROJECT_ID`, `APP_ID` |
-| Tham số web | `MIN_STEP_M` (15 m dead-zone chống nhiễu GPS), `MAX_JUMP_M` (500 m guard), `DEVICE_TTL_MS` (60 s), `MAX_HISTORY` (250 điểm lộ trình) |
+| Tham số web | `MIN_STEP_M` (15 m dead-zone chống nhiễu GPS), `MAX_JUMP_M` (500 m guard), `DEVICE_TTL_MS` (60 s), `MAX_HISTORY` (250 điểm lộ trình), geolocation `maximumAge=0`/`timeout=10s` (fix GPS mới nhất) |
 | Android | `UPDATE_INTERVAL_MS` (5 s), `ALARM_DURATION_MS` (10 s) |
+| Mô phỏng | `SIM_SPEED` (driving 45 km/h, walking 5, cycling 20), profile OSRM `driving`/`walking`/`cycling`; OSRM public không có profile đường thủy (`waterway`) |
 
 ---
 
 ## 🎯 Tính năng
 
-- ✅ Map realtime nhiều lớp nền (CARTO sáng mặc định, Voyager, OSM, vệ tinh)
+- ✅ Map realtime nhiều lớp nền (OSM đường phố mặc định, CARTO sáng, Voyager, vệ tinh)
 - ✅ Chống nhiễu/jitter GPS: dead-zone 15 m, teleport guard, làm mượt marker, vòng tròn sai số giới hạn 300 m → hết hiện tượng "sao băng"
 - ✅ Lộ trình dạng polyline + mũi tên hướng di chuyển trên marker
+- ✅ Khoảng cách "Đã đi" = tổng chiều dài lộ trình thực tế (breadcrumb tích lũy), không phải đường chim bay
 - ✅ Telemetry: pin %, icon ⚡ khi sạc, tốc độ km/h, timestamp
 - ✅ Trạng thái online/offline tự động (TTL 60 s)
 - ✅ Bám theo ("follow") vị trí của bạn hoặc theo từng thiết bị
 - ✅ Điều khiển từ xa: phát âm thanh, tăng âm lượng (PLAY_SOUND / VOLUME_UP)
-- ✅ Xóa thiết bị khỏi map, toggle hiện/ẩn thiết bị mô phỏng, chế độ mô phỏng ngay trên web
+- ✅ Xóa thiết bị khỏi map, toggle hiện/ẩn thiết bị mô phỏng
+- ✅ **Mô phỏng theo routing OSRM**: chọn phương tiện (ô tô/xe máy, đi bộ, xe đạp), tap điểm đến trên bản đồ → tính tuyến ngắn nhất theo đường thực tế → thiết bị ảo chạy dọc tuyến với tốc độ, pin, quãng đường và % tiến độ
 - ✅ PWA: cài lên màn hình chính Android/iOS, offline cache
+- ✅ Định vị web chính xác hơn: `maximumAge=0` luôn lấy fix GPS mới nhất, `getCurrentPosition` khởi động nhanh
 - ✅ Android: Foreground Service START_STICKY + battery whitelist
 
 ## License

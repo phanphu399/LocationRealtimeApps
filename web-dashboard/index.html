@@ -106,7 +106,7 @@
         <!-- Telemetry -->
         <div class="stats-grid">
           <div class="stat-item"><span class="stat-label">Cập nhật</span><span class="stat-value" id="statTime">--</span></div>
-          <div class="stat-item"><span class="stat-label">Khoảng cách</span><span class="stat-value" id="statDistance">--</span></div>
+          <div class="stat-item"><span class="stat-label">Đã đi</span><span class="stat-value" id="statDistance">--</span></div>
           <div class="stat-item"><span class="stat-label">Tốc độ</span><span class="stat-value" id="statSpeed">--</span></div>
           <div class="stat-item" id="batteryStatItem"><span class="stat-label">Pin</span>
             <div class="battery-row">
@@ -127,10 +127,22 @@
             <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
             <span>Tăng âm lượng</span>
           </button>
-          <button id="btnSimulate" class="btn btn-sim">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            <span>Mô phỏng di chuyển</span>
-          </button>
+
+          <div class="sim-box">
+            <div class="sim-row">
+              <label for="simMode" class="sim-label">Phương tiện</label>
+              <select id="simMode" class="sim-select">
+                <option value="driving">Ô tô / xe máy (driving)</option>
+                <option value="walking">Đi bộ (walking)</option>
+                <option value="cycling">Xe đạp (cycling)</option>
+              </select>
+            </div>
+            <button id="btnSimulate" class="btn btn-sim">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              <span>Mô phỏng tuyến đường</span>
+            </button>
+            <div id="simStatus" class="sim-status"></div>
+          </div>
         </div>
       </div>
 
