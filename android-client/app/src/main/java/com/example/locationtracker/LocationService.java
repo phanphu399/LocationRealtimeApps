@@ -46,8 +46,10 @@ import java.util.Map;
  *  1. LẤY TỌA ĐỘ GPS: Dùng FusedLocationProviderClient lấy vị trí mỗi 5 giây,
  *     đẩy {lat, lng, timestamp} lên Firebase path /devices/device_android_01.
  *
- *  2. LẮNG NGHE LỆNH "PLAY_SOUND": Lắng nghe liên tục field "command" trên
- *     Firebase. Khi web dashboard gửi giá trị "PLAY_SOUND", service sẽ:
+ *  2. LẮNG NGHE LỆNH "PLAY_SOUND": Lắng nghe liên tục node:
+ *         /devices/device_android_01/command
+ *     (KHỚP 100% với app.js trên web dashboard - ref(db, "devices/device_android_01/command")).
+ *     Khi nhận giá trị "PLAY_SOUND", service sẽ:
  *       a. Ép âm lượng báo thức tối đa (AudioManager)
  *       b. Phát âm thanh báo động (alarm ringtone) qua MediaPlayer
  *       c. Sau 10 giây -> dừng phát + ghi lại giá trị "NONE" vào Firebase
@@ -62,8 +64,9 @@ public class LocationService extends Service {
     private static final String FIREBASE_PROJECT_ID = "locationrealtimeapps";
     private static final String FIREBASE_APP_ID = "1:549557847899:web:18339736baa351804c3c7e";
 
-    // Định danh thiết bị trên Realtime DB
-    private static final String DEVICE_PATH = "devices/device_android_01";
+    // ---- Đường dẫn Firebase (ĐỒNG BỘ 100% với web-dashboard/app.js) ----
+    private static final String DEVICE_PATH   = "devices/device_android_01";
+    private static final String COMMAND_PATH  = "devices/device_android_01/command";
 
     // ---- Cấu hình location ----
     private static final long UPDATE_INTERVAL_MS = 5000L;
@@ -81,6 +84,7 @@ public class LocationService extends Service {
 
     // ---- Firebase ----
     private DatabaseReference deviceRef;
+    private DatabaseReference commandRef;   // Reference tới /devices/device_android_01/command
     private ValueEventListener commandListener;
 
     // ---- Alarm / Sound ----
@@ -104,6 +108,7 @@ public class LocationService extends Service {
         // Firebase
         ensureFirebaseInitialized();
         deviceRef = FirebaseDatabase.getInstance().getReference(DEVICE_PATH);
+        commandRef = FirebaseDatabase.getInstance().getReference(COMMAND_PATH);
 
         // Location
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
@@ -135,8 +140,8 @@ public class LocationService extends Service {
         }
 
         // Bỏ lắng nghe lệnh
-        if (commandListener != null && deviceRef != null) {
-            deviceRef.child("command").removeEventListener(commandListener);
+        if (commandListener != null && commandRef != null) {
+            commandRef.removeEventListener(commandListener);
         }
 
         // Dừng MediaPlayer nếu đang phát
@@ -192,17 +197,25 @@ public class LocationService extends Service {
     /* ===================================================================== */
 
     /**
-     * Bắt đầu lắng nghe node "command" trên Firebase.
-     * Khi web dashboard ghi giá trị "PLAY_SOUND" -> service sẽ phát âm thanh.
+     * Bắt đầu lắng nghe node "command" trên Firebase:
+     *   /devices/device_android_01/command
+     *
+     * Đây chính xác là node mà web-dashboard/app.js ghi giá trị khi
+     * người dùng bấm nút "Play Sound" (ref(db, "devices/device_android_01/command")).
      */
     private void startCommandListener() {
         commandListener = new ValueEventListener() {
+            /**
+             * Được gọi khi command thay đổi:
+             *  - "PLAY_SOUND" -> phát âm thanh báo động
+             *  - "NONE"      -> (mặc định, bỏ qua)
+             */
             @Override
             public void onDataChange(DataSnapshot snapshot) {
                 String command = snapshot.getValue(String.class);
                 if (command == null) return;
 
-                Log.d(TAG, "Nhận lệnh từ Firebase: " + command);
+                Log.d(TAG, "Nhận lệnh tại " + COMMAND_PATH + ": " + command);
 
                 if ("PLAY_SOUND".equals(command)) {
                     playAlarmSound();
@@ -215,8 +228,8 @@ public class LocationService extends Service {
             }
         };
 
-        deviceRef.child("command").addValueEventListener(commandListener);
-        Log.d(TAG, "Đăng ký lắng nghe lệnh PLAY_SOUND tại /devices/device_android_01/command");
+        commandRef.addValueEventListener(commandListener);
+        Log.d(TAG, "Đăng ký lắng nghe lệnh tại /" + COMMAND_PATH);
     }
 
     /* ===================================================================== */
@@ -300,11 +313,11 @@ public class LocationService extends Service {
 
     /**
      * Ghi giá trị "NONE" vào /devices/device_android_01/command
-     * để web dashboard biết lệnh đã được xử lý.
+     * để web dashboard biết lệnh đã được xử lý xong.
      */
     private void resetCommandToNone() {
-        if (deviceRef != null) {
-            deviceRef.child("command").setValue("NONE")
+        if (commandRef != null) {
+            commandRef.setValue("NONE")
                     .addOnSuccessListener(aVoid -> Log.d(TAG, "Command đã reset về NONE"))
                     .addOnFailureListener(e -> Log.e(TAG, "Reset command thất bại: " + e.getMessage()));
         }
