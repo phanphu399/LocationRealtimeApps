@@ -110,8 +110,6 @@ let simTimer = null;
 /* ============================================================ */
 
 const $ = (id) => document.getElementById(id);
-const connDot         = $("connDot");
-const connText        = $("connText");
 const myAddress       = $("myAddress");
 const myAccuracy      = $("myAccuracy");
 const deviceList      = $("deviceList");
@@ -213,8 +211,6 @@ cbSimDevices.addEventListener('change', () => {
 
 onValue(ref(db, ".info/connected"), (snap) => {
   const connected = snap.val() === true;
-  connDot.className = "conn-dot " + (connected ? "online" : "offline");
-  connText.textContent = connected ? "Đã kết nối Firebase" : "Mất kết nối Firebase";
   const mtbDot = $("mtbDot");
   if (mtbDot) {
     mtbDot.className = "mtb-dot " + (connected ? "online" : "offline");
