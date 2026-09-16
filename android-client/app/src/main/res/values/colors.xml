@@ -5,6 +5,7 @@
     <color name="primary_dark">#0D47A1</color>
     <color name="accent">#34A853</color>
     <color name="accent_red">#EA4335</color>
+    <color name="accent_blue">#1A73E8</color>
 
     <!-- Surfaces -->
     <color name="background">#F5F7FA</color>

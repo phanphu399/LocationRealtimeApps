@@ -1,9 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
 import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
 
-/* ==================================================================
-   FIREBASE CONFIG - đồng bộ với firebaseConfig.txt
-   ================================================================== */
+/* ============================================================ */
+/*  FIREBASE CONFIG                                              */
+/* ============================================================ */
 
 const firebaseConfig = {
   apiKey: "AIzaSyD_mMdWjE7xcI4fqAX03iP5p4joq1af838",
@@ -19,9 +19,9 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-/* ==================================================================
-   MAP - 2 lớp bản đồ (OSM + Satellite)
-   ================================================================== */
+/* ============================================================ */
+/*  MAP                                                          */
+/* ============================================================ */
 
 const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "&copy; OpenStreetMap contributors"
@@ -44,61 +44,130 @@ L.control.layers(
   { position: "topright", collapsed: false }
 ).addTo(map);
 
-/* ==================================================================
-   STATE
-   ================================================================== */
+/* ============================================================ */
+/*  STATE                                                        */
+/* ============================================================ */
 
-const DEVICE_TTL_MS = 60_000;          // 60s không nhận dữ liệu => coi như offline
-let myPos = null;                       // [lat, lng] của trình duyệt
-let myMarker = null;                    // L.circleMarker "bạn đang ở đây"
+const DEVICE_TTL_MS = 60_000;
+const TARGET_DEVICE = "device_android_01";
+const GEOCODE_COOLDOWN_MS = 10_000;
+
+let myPos = null;
+let myMarker = null;
 let myAccuracyCircle = null;
-const deviceMarkers = {};               // deviceId -> L.marker
-const deviceData = {};                  // deviceId -> { lat, lng, ts, command }
-let didMoveToFirstFix = false;          // đã tự di chuyển bản đồ lần đầu
+let firstFixDone = false;
+const newDeviceFitted = {};
+const deviceMarkers = {};
+const deviceData = {};
+const addressCache = new Map();
+const geocodeTimestamps = {};
+let lastFitTime = 0;
 
-/* ==================================================================
-   DOM REFS
-   ================================================================== */
+/* ============================================================ */
+/*  DOM REFS                                                     */
+/* ============================================================ */
 
 const $ = (id) => document.getElementById(id);
-const connDot      = $("connDot");
-const connText     = $("connText");
-const myLat        = $("myLat");
-const myLng        = $("myLng");
-const myAccuracy   = $("myAccuracy");
-const deviceList   = $("deviceList");
-const listEmpty    = $("deviceListEmpty");
-const devStatus    = $("deviceStatus");
-const statLat      = $("statLat");
-const statLng      = $("statLng");
-const statTime     = $("statTime");
-const statDistance = $("statDistance");
-const btnPlaySound = $("btnPlaySound");
-const TARGET_DEVICE = "device_android_01";
+const connDot         = $("connDot");
+const connText        = $("connText");
+const myAddress       = $("myAddress");
+const myAccuracy      = $("myAccuracy");
+const deviceList      = $("deviceList");
+const listEmpty       = $("deviceListEmpty");
+const devName         = $("deviceName");
+const devStatus       = $("deviceStatus");
+const deviceAddress   = $("deviceAddress");
+const statTime        = $("statTime");
+const statDistance    = $("statDistance");
+const statAddress     = $("statAddress");
+const statBattery     = $("statBattery");
+const batteryFill     = $("batteryFill");
+const batteryStatItem = $("batteryStatItem");
+const btnPlaySound    = $("btnPlaySound");
+const btnVolumeUp     = $("btnVolumeUp");
+const btnFitMap       = $("btnFitMap");
+const btnToggle       = $("btnToggle");
+const overlay         = $("overlay");
+const sidebar         = $("sidebar");
 
-/* ==================================================================
-   TRẠNG THÁI KẾT NỐI FIREBASE (.info/connected)
-   ================================================================== */
+/* ============================================================ */
+/*  REVERSE GEOCODING (Nominatim)                                */
+/* ============================================================ */
+
+async function reverseGeocode(lat, lng) {
+  const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+  if (addressCache.has(key)) return addressCache.get(key);
+
+  const now = Date.now();
+  if (geocodeTimestamps[key] && now - geocodeTimestamps[key] < GEOCODE_COOLDOWN_MS) {
+    return addressCache.get(key) || '';
+  }
+  geocodeTimestamps[key] = now;
+
+  try {
+    const resp = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18&accept-language=vi`,
+      { headers: { 'User-Agent': 'GPSTracker/1.0' } }
+    );
+    const data = await resp.json();
+    const addr = data.display_name || '';
+    addressCache.set(key, addr);
+    return addr;
+  } catch {
+    return addressCache.get(key) || '';
+  }
+}
+
+function getShortAddress(full) {
+  if (!full) return '--';
+  const parts = full.split(',').map(s => s.trim());
+  return parts.length > 3 ? parts.slice(0, 3).join(', ') + '...' : full;
+}
+
+/* ============================================================ */
+/*  HAMBURGER / MOBILE MENU                                      */
+/* ============================================================ */
+
+function openSidebar() {
+  sidebar.classList.add('open');
+  overlay.classList.add('open');
+}
+
+function closeSidebar() {
+  sidebar.classList.remove('open');
+  overlay.classList.remove('open');
+}
+
+btnToggle.addEventListener('click', () => {
+  sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
+});
+
+overlay.addEventListener('click', closeSidebar);
+
+/* ============================================================ */
+/*  FIREBASE CONNECTION STATUS                                   */
+/* ============================================================ */
 
 onValue(ref(db, ".info/connected"), (snap) => {
   const connected = snap.val() === true;
   connDot.className = "conn-dot " + (connected ? "online" : "offline");
-  connText.textContent = connected
-    ? "Đã kết nối Firebase"
-    : "Mất kết nối Firebase";
+  connText.textContent = connected ? "Đã kết nối Firebase" : "Mất kết nối Firebase";
 });
 
-/* ==================================================================
-   VỊ TRÍ CỦA BẠN (Browser Geolocation - realtime, tự cập nhật)
-   ================================================================== */
+/* ============================================================ */
+/*  BROWSER GEOLOCATION                                          */
+/* ============================================================ */
 
-function logMyLocation (position) {
+function onGeoSuccess(position) {
   const { latitude, longitude, accuracy } = position.coords;
+  const firstTime = !myPos;
   myPos = [latitude, longitude];
 
-  myLat.textContent = latitude.toFixed(6);
-  myLng.textContent = longitude.toFixed(6);
   myAccuracy.textContent = `Độ chính xác ±${Math.round(accuracy)} m · tự cập nhật`;
+
+  reverseGeocode(latitude, longitude).then(addr => {
+    myAddress.textContent = getShortAddress(addr) || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+  });
 
   if (myMarker) {
     myMarker.setLatLng(myPos);
@@ -122,64 +191,100 @@ function logMyLocation (position) {
     }).addTo(map).bindPopup("<b>Bạn đang ở đây</b>");
   }
 
-  fitView();
+  if (firstTime && !firstFixDone) {
+    firstFixDone = true;
+    const deviceIds = Object.keys(deviceData);
+    if (deviceIds.length === 0) {
+      map.setView(myPos, 15);
+    }
+  }
+
   updateDistances();
+  updateDetailCardAddress();
 }
 
-function failMyLocation (err) {
+function onGeoError(err) {
   myAccuracy.textContent = `Không lấy được vị trí: ${err.message || "đã từ chối quyền"}`;
 }
 
-function initMyLocation () {
+function initGeolocation() {
   if (!("geolocation" in navigator)) {
     myAccuracy.textContent = "Trình duyệt không hỗ trợ định vị";
     return;
   }
-  // watchPosition: cập nhật liên tục khi người dùng di chuyển (realtime)
-  navigator.geolocation.watchPosition(logMyLocation, failMyLocation, {
+  navigator.geolocation.watchPosition(onGeoSuccess, onGeoError, {
     enableHighAccuracy: true,
     maximumAge: 5000,
     timeout: 15000
   });
 }
 
-/* ==================================================================
-   LẮNG NGHE /devices (realtime từ Firebase)
-   ================================================================== */
+/* ============================================================ */
+/*  FIREBASE DEVICE LISTENER                                     */
+/* ============================================================ */
 
 const deviceRef = ref(db, "devices");
 
 onValue(deviceRef, (snapshot) => {
   const data = snapshot.val();
-  if (!data) { renderDeviceList(); return; }
+  if (!data) {
+    renderDeviceList();
+    return;
+  }
 
   for (const [deviceId, device] of Object.entries(data)) {
     if (device.lat == null || device.lng == null) continue;
+
+    const existed = !!deviceData[deviceId];
 
     deviceData[deviceId] = {
       lat: Number(device.lat),
       lng: Number(device.lng),
       ts: (device.timestamp || 0) * 1000,
-      command: device.command
+      command: device.command,
+      battery: device.battery != null ? Number(device.battery) : null
     };
 
     upsertDeviceMarker(deviceId);
+
+    if (!existed && !newDeviceFitted[deviceId]) {
+      newDeviceFitted[deviceId] = true;
+      autoFitNewDevice(deviceId);
+    }
   }
 
   renderDeviceList();
   updateDetailCard();
   updateDistances();
-  fitView();
 });
 
-/** Tạo mới hoặc di chuyển marker của thiết bị (hiệu ứng realtime). */
-function upsertDeviceMarker (deviceId) {
+function autoFitNewDevice(deviceId) {
+  const d = deviceData[deviceId];
+  if (!d) return;
+  const now = Date.now();
+  if (now - lastFitTime < 5000) return;
+  lastFitTime = now;
+  const pts = [];
+  if (myPos) pts.push(myPos);
+  pts.push([d.lat, d.lng]);
+  if (pts.length >= 2) {
+    try { map.fitBounds(L.latLngBounds(pts), { padding: [60, 60], maxZoom: 15 }); } catch (_) {}
+  }
+}
+
+/* ============================================================ */
+/*  DEVICE MARKERS                                               */
+/* ============================================================ */
+
+function upsertDeviceMarker(deviceId) {
   const d = deviceData[deviceId];
   const latLng = [d.lat, d.lng];
 
   if (deviceMarkers[deviceId]) {
     deviceMarkers[deviceId].setLatLng(latLng);
-    deviceMarkers[deviceId].setPopupContent(buildPopup(deviceId));
+    buildPopup(deviceId).then(html => {
+      deviceMarkers[deviceId].setPopupContent(html);
+    });
     return;
   }
 
@@ -195,24 +300,28 @@ function upsertDeviceMarker (deviceId) {
   });
 
   const marker = L.marker(latLng, { icon }).addTo(map);
-  marker.bindPopup(buildPopup(deviceId));
   deviceMarkers[deviceId] = marker;
+
+  buildPopup(deviceId).then(html => {
+    marker.bindPopup(html);
+  });
 }
 
-function buildPopup (deviceId) {
+async function buildPopup(deviceId) {
   const d = deviceData[deviceId];
   const dist = myPos ? fmtDistance(haversine(myPos, [d.lat, d.lng])) : "--";
+  const addr = await reverseGeocode(d.lat, d.lng);
+  const short = getShortAddress(addr);
   return `<div class="pop-title">${deviceId}</div>
-          <div class="pop-row">Lat: ${d.lat.toFixed(6)}</div>
-          <div class="pop-row">Lng: ${d.lng.toFixed(6)}</div>
+          <div class="pop-addr">${short || d.lat.toFixed(6) + ', ' + d.lng.toFixed(6)}</div>
           <div class="pop-dist">Cách bạn ${dist}</div>`;
 }
 
-/* ==================================================================
-   RENDER DANH SÁCH THIẾT BỊ (freshness = realtime offline/online)
-   ================================================================== */
+/* ============================================================ */
+/*  RENDER DEVICE LIST                                           */
+/* ============================================================ */
 
-function renderDeviceList () {
+function renderDeviceList() {
   const ids = Object.keys(deviceData);
   listEmpty.style.display = ids.length ? "none" : "block";
   deviceList.innerHTML = "";
@@ -222,6 +331,7 @@ function renderDeviceList () {
     const fresh = now - d.ts < DEVICE_TTL_MS;
     const ageSec = Math.max(0, Math.floor((now - d.ts) / 1000));
     const dist = myPos ? fmtDistance(haversine(myPos, [d.lat, d.lng])) : "--";
+    const battery = d.battery;
 
     const item = document.createElement("div");
     item.className = "device-list-item";
@@ -229,50 +339,79 @@ function renderDeviceList () {
       <span class="dev-dot ${fresh ? "online" : "offline"}"></span>
       <div class="dev-info">
         <div class="dev-name">${deviceId}</div>
-        <div class="dev-sub">${fresh ? activeLabel(ageSec) : `Không tín hiệu · ${ageSec}s trước`}</div>
+        <div class="dev-sub">${fresh ? timeAgoVietnamese(ageSec) : `Mất tín hiệu · ${ageSec}s trước`}</div>
       </div>
+      ${battery != null ? `<div class="dev-battery ${batteryClass(battery)}">${battery}%</div>` : ''}
       <div class="dev-dist">${dist}</div>`;
     deviceList.appendChild(item);
   }
 }
 
-function activeLabel (sec) {
-  if (sec < 3) return "Đang hoạt động";
-  if (sec < 60) return `Cập nhật ${sec}s trước`;
-  return `Cập nhật ${Math.floor(sec / 60)} phút trước`;
+function timeAgoVietnamese(sec) {
+  if (sec < 3) return "Vừa xong";
+  if (sec < 60) return `${sec}s trước`;
+  return `${Math.floor(sec / 60)} phút trước`;
 }
 
-function updateDetailCard () {
+function batteryClass(pct) {
+  if (pct <= 10) return "bat-critical";
+  if (pct <= 20) return "bat-low";
+  return "bat-ok";
+}
+
+/* ============================================================ */
+/*  DETAIL CARD                                                  */
+/* ============================================================ */
+
+function updateDetailCard() {
   const d = deviceData[TARGET_DEVICE];
   if (!d) return;
 
   const fresh = Date.now() - d.ts < DEVICE_TTL_MS;
+  devName.textContent = TARGET_DEVICE;
   devStatus.textContent = fresh ? "Đang hoạt động" : "Mất tín hiệu";
   devStatus.className = "device-status " + (fresh ? "online" : "offline");
 
-  statLat.textContent = d.lat.toFixed(6);
-  statLng.textContent = d.lng.toFixed(6);
+  updateDetailCardAddress();
+
+  if (d.battery != null) {
+    batteryStatItem.style.display = "";
+    statBattery.textContent = d.battery + "%";
+    batteryFill.style.width = d.battery + "%";
+    batteryFill.className = "battery-fill " + batteryClass(d.battery);
+  } else {
+    batteryStatItem.style.display = "none";
+  }
 }
 
-/* ==================================================================
-   ĐẾM NGƯỢC THỜI GIAN CẬP NHẬT (realtime mỗi giây)
-   ================================================================== */
+function updateDetailCardAddress() {
+  const d = deviceData[TARGET_DEVICE];
+  if (!d) return;
+  reverseGeocode(d.lat, d.lng).then(addr => {
+    const display = addr || `${d.lat.toFixed(6)}, ${d.lng.toFixed(6)}`;
+    deviceAddress.textContent = display;
+    statAddress.textContent = display;
+  });
+}
+
+/* ============================================================ */
+/*  TIMER — update every second                                  */
+/* ============================================================ */
 
 setInterval(() => {
   const d = deviceData[TARGET_DEVICE];
-  if (!d) return;
-  const sec = Math.max(0, Math.floor((Date.now() - d.ts) / 1000));
-  statTime.textContent = sec < 1 ? "Vừa xong" : `${sec}s trước`;
-
-  // Refresh lại danh sách để chuyển trạng thái online/offline đúng hạn
+  if (d) {
+    const sec = Math.max(0, Math.floor((Date.now() - d.ts) / 1000));
+    statTime.textContent = sec < 1 ? "Vừa xong" : `${sec}s trước`;
+  }
   renderDeviceList();
 }, 1000);
 
-/* ==================================================================
-   KHOẢNG CÁCH (Haversine) + AUTO-FIT BẢN ĐỒ
-   ================================================================== */
+/* ============================================================ */
+/*  DISTANCE (Haversine)                                         */
+/* ============================================================ */
 
-function haversine ([lat1, lng1], [lat2, lng2]) {
+function haversine([lat1, lng1], [lat2, lng2]) {
   const R = 6371000;
   const toRad = (x) => (x * Math.PI) / 180;
   const dLat = toRad(lat2 - lat1);
@@ -283,61 +422,67 @@ function haversine ([lat1, lng1], [lat2, lng2]) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function fmtDistance (m) {
+function fmtDistance(m) {
   if (m < 1000) return `${Math.round(m)} m`;
   return `${(m / 1000).toFixed(2)} km`;
 }
 
-function updateDistances () {
+function updateDistances() {
   if (!myPos) return;
   const d = deviceData[TARGET_DEVICE];
   if (d) statDistance.textContent = fmtDistance(haversine(myPos, [d.lat, d.lng]));
 }
 
-/** Tự động thu bản đồ vừa "bạn" vừa tất cả thiết bị khi có đủ thông tin. */
-function fitView () {
-  const hasMy = !!myPos;
-  const deviceIds = Object.keys(deviceData);
-  if (!hasMy && deviceIds.length === 0) return;
+/* ============================================================ */
+/*  MANUAL FIT VIEW                                              */
+/* ============================================================ */
 
-  if (!didMoveToFirstFix) {
-    didMoveToFirstFix = true;
-    if (hasMy && deviceIds.length === 0) return map.setView(myPos, 15);
-  }
-
+btnFitMap.addEventListener('click', () => {
   const pts = [];
-  if (hasMy) pts.push(myPos);
-  deviceIds.forEach((id) => pts.push([deviceData[id].lat, deviceData[id].lng]));
+  if (myPos) pts.push(myPos);
+  for (const d of Object.values(deviceData)) {
+    pts.push([d.lat, d.lng]);
+  }
+  if (pts.length === 0) return;
   try {
     map.fitBounds(L.latLngBounds(pts), { padding: [60, 60], maxZoom: 15 });
-  } catch (_) { /* ignore */ }
-}
-
-/* ==================================================================
-   PLAY SOUND - Gửi lệnh PLAY_SOUND lên Firebase
-   ================================================================== */
-
-btnPlaySound.addEventListener("click", async () => {
-  if (btnPlaySound.classList.contains("loading")) return;
-
-  btnPlaySound.classList.add("loading");
-  btnPlaySound.disabled = true;
-
-  try {
-    await set(ref(db, `devices/${TARGET_DEVICE}/command`), "PLAY_SOUND");
-  } catch (err) {
-    console.error("[Play Sound] Lỗi:", err);
-  } finally {
-    setTimeout(() => {
-      btnPlaySound.classList.remove("loading");
-      btnPlaySound.disabled = false;
-    }, 1500);
-  }
+  } catch (_) {}
 });
 
-/* ==================================================================
-   KHỞI ĐỘNG
-   ================================================================== */
+/* ============================================================ */
+/*  SEND COMMANDS                                                */
+/* ============================================================ */
 
-initMyLocation();
+async function sendCommand(command, btn) {
+  if (btn.classList.contains("loading")) return;
+  btn.classList.add("loading");
+  btn.disabled = true;
+  try {
+    await set(ref(db, `devices/${TARGET_DEVICE}/command`), command);
+  } catch (err) {
+    console.error(`[Command] Lỗi:`, err);
+  } finally {
+    setTimeout(() => {
+      btn.classList.remove("loading");
+      btn.disabled = false;
+    }, 1500);
+  }
+}
+
+btnPlaySound.addEventListener('click', () => sendCommand("PLAY_SOUND", btnPlaySound));
+btnVolumeUp.addEventListener('click', () => sendCommand("VOLUME_UP", btnVolumeUp));
+
+/* ============================================================ */
+/*  SERVICE WORKER                                               */
+/* ============================================================ */
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+/* ============================================================ */
+/*  INIT                                                         */
+/* ============================================================ */
+
+initGeolocation();
 renderDeviceList();

@@ -1,6 +1,36 @@
-/* ==========================================================
-   GPS Realtime Tracker - Professional Dashboard Styles
-   ========================================================== */
+/* ============================================================
+   GPS Realtime Tracker - Mobile-First PWA Dashboard
+   ============================================================ */
+
+:root {
+  --blue-500: #1a73e8;
+  --blue-600: #1565c0;
+  --blue-700: #0d47a1;
+  --blue-50: #e8f0fe;
+  --blue-100: #e3f2fd;
+  --green-500: #34a853;
+  --green-400: #4ade80;
+  --red-400: #f87171;
+  --yellow-400: #fbbc04;
+  --gray-50: #f8f9fa;
+  --gray-100: #f0f2f5;
+  --gray-200: #e8eaed;
+  --gray-400: #9aa0a6;
+  --gray-500: #5f6368;
+  --gray-600: #3c4043;
+  --gray-900: #202124;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.10);
+  --shadow-lg: 0 6px 24px rgba(0,0,0,0.14);
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --sidebar-w: 360px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ===================== RESET ===================== */
 
 * {
   margin: 0;
@@ -12,9 +42,10 @@ html, body {
   width: 100%;
   height: 100%;
   font-family: 'Segoe UI', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
-  background: #f0f2f5;
+  background: var(--gray-100);
   overflow: hidden;
-  color: #202124;
+  color: var(--gray-900);
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* ===================== APP LAYOUT ===================== */
@@ -23,19 +54,80 @@ html, body {
   display: flex;
   width: 100vw;
   height: 100vh;
+  position: relative;
+}
+
+/* ===================== HAMBURGER ===================== */
+
+.hamburger {
+  display: none;
+  position: fixed;
+  top: calc(12px + var(--safe-top));
+  left: 12px;
+  z-index: 1200;
+  width: 42px;
+  height: 42px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.95);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 10px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.hamburger span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: var(--gray-900);
+  border-radius: 2px;
+  transition: transform 0.25s, opacity 0.25s;
+}
+
+.hamburger.active span:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+
+.hamburger.active span:nth-child(2) {
+  opacity: 0;
+}
+
+.hamburger.active span:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
+.overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  z-index: 1050;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.overlay.open {
+  opacity: 1;
 }
 
 /* ===================== SIDEBAR ===================== */
 
 #sidebar {
-  width: 360px;
-  min-width: 360px;
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
   height: 100vh;
   display: flex;
   flex-direction: column;
   background: #ffffff;
-  box-shadow: 2px 0 20px rgba(0, 0, 0, 0.10);
-  z-index: 1000;
+  box-shadow: 2px 0 20px rgba(0,0,0,0.10);
+  z-index: 1100;
+  transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
 }
 
 .sidebar-header {
@@ -43,7 +135,8 @@ html, body {
   align-items: center;
   gap: 12px;
   padding: 20px 22px;
-  background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%);
+  padding-top: calc(20px + var(--safe-top));
+  background: linear-gradient(135deg, var(--blue-500) 0%, var(--blue-700) 100%);
   color: #ffffff;
   flex-shrink: 0;
 }
@@ -66,7 +159,8 @@ html, body {
   flex-shrink: 0;
 }
 
-/* Kết nối Firebase */
+/* ===================== CONNECTION STATUS ===================== */
+
 .conn-row {
   display: flex;
   align-items: center;
@@ -79,17 +173,17 @@ html, body {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: #fbbc04;
+  background: var(--yellow-400);
   box-shadow: 0 0 0 0 rgba(251,188,4,0.6);
 }
 
 .conn-dot.online {
-  background: #4ade80;
+  background: var(--green-400);
   animation: pulse-dot 1.6s infinite;
 }
 
 .conn-dot.offline {
-  background: #f87171;
+  background: var(--red-400);
 }
 
 @keyframes pulse-dot {
@@ -98,13 +192,17 @@ html, body {
   100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); }
 }
 
+/* ===================== SIDEBAR BODY ===================== */
+
 .sidebar-body {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
+  padding-bottom: calc(16px + var(--safe-bottom));
   display: flex;
   flex-direction: column;
   gap: 14px;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ===================== SECTION TITLES ===================== */
@@ -123,65 +221,48 @@ html, body {
   flex-shrink: 0;
 }
 
-.title-dot.blue  { background: #1a73e8; }
-.title-dot.green { background: #34a853; }
+.title-dot.blue  { background: var(--blue-500); }
+.title-dot.green { background: var(--green-500); }
 
 .section-title {
   font-size: 13px;
   font-weight: 700;
-  color: #3c4043;
+  color: var(--gray-600);
   letter-spacing: 0.3px;
 }
 
 .badge {
   margin-left: auto;
-  background: #e8f0fe;
-  color: #1a73e8;
+  background: var(--blue-50);
+  color: var(--blue-500);
   font-size: 11px;
   font-weight: 600;
   padding: 3px 8px;
   border-radius: 20px;
 }
 
-/* ===================== VỊ TRÍ CỦA BẠN ===================== */
+/* ===================== MY LOCATION CARD ===================== */
 
 .my-location-card {
   padding: 14px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #e3f2fd, #eaf6ff);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--blue-100), #eaf6ff);
   border: 1px solid #bbdefb;
 }
 
-.my-coords {
-  display: flex;
-  gap: 12px;
-}
-
-.coord-block {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.coord-block label {
-  font-size: 10px;
-  font-weight: 600;
-  color: #5f6368;
-  letter-spacing: 0.6px;
-}
-
-.coord-block span {
-  font-size: 15px;
-  font-weight: 700;
-  color: #174ea6;
-  font-variant-numeric: tabular-nums;
+.my-address {
+  font-size: 13px;
+  color: var(--gray-500);
+  font-style: italic;
+  line-height: 1.5;
+  min-height: 20px;
+  margin-top: 4px;
 }
 
 .my-meta {
-  margin-top: 10px;
+  margin-top: 8px;
   font-size: 12px;
-  color: #5f6368;
+  color: var(--gray-500);
 }
 
 /* ===================== DEVICE LIST ===================== */
@@ -197,14 +278,15 @@ html, body {
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  border-radius: 12px;
-  background: #f8f9fa;
-  border: 1px solid #e8eaed;
-  transition: border-color .2s, background .2s;
+  border-radius: var(--radius-md);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  transition: border-color 0.2s, background 0.2s;
+  cursor: pointer;
 }
 
 .device-list-item:hover {
-  border-color: #1a73e8;
+  border-color: var(--blue-500);
   background: #f1f6ff;
 }
 
@@ -215,8 +297,8 @@ html, body {
   flex-shrink: 0;
 }
 
-.dev-dot.online  { background: #34a853; animation: pulse-dot 1.8s infinite; }
-.dev-dot.offline { background: #9aa0a6; }
+.dev-dot.online  { background: var(--green-500); animation: pulse-dot 1.8s infinite; }
+.dev-dot.offline { background: var(--gray-400); }
 
 .dev-info {
   flex: 1;
@@ -226,7 +308,7 @@ html, body {
 .dev-name {
   font-size: 13px;
   font-weight: 600;
-  color: #202124;
+  color: var(--gray-900);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -234,19 +316,31 @@ html, body {
 
 .dev-sub {
   font-size: 11.5px;
-  color: #5f6368;
+  color: var(--gray-500);
 }
+
+.dev-battery {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.dev-battery.bat-ok       { background: #e6f4ea; color: var(--green-500); }
+.dev-battery.bat-low      { background: #fef7e0; color: #e37400; }
+.dev-battery.bat-critical { background: #fce8e6; color: #d93025; }
 
 .dev-dist {
   font-size: 12.5px;
   font-weight: 700;
-  color: #1a73e8;
+  color: var(--blue-500);
   white-space: nowrap;
 }
 
 .empty-hint {
   text-align: center;
-  color: #9aa0a6;
+  color: var(--gray-400);
   font-size: 12.5px;
   padding: 14px;
 }
@@ -258,16 +352,16 @@ html, body {
   align-items: center;
   gap: 14px;
   padding: 14px;
-  border-radius: 12px;
-  background: #f8f9fa;
-  border: 1px solid #e8eaed;
+  border-radius: var(--radius-md);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
 }
 
 .device-avatar {
   width: 46px;
   height: 46px;
   border-radius: 50%;
-  background: #e3f2fd;
+  background: var(--blue-100);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -277,7 +371,7 @@ html, body {
 .device-avatar svg {
   width: 22px;
   height: 22px;
-  color: #1a73e8;
+  color: var(--blue-500);
 }
 
 .device-info {
@@ -290,7 +384,7 @@ html, body {
 .device-name {
   font-size: 14px;
   font-weight: 600;
-  color: #202124;
+  color: var(--gray-900);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -298,15 +392,36 @@ html, body {
 
 .device-status {
   font-size: 12px;
-  color: #5f6368;
+  color: var(--gray-500);
 }
 
-.device-status.online {
-  color: #34a853;
+.device-status.online  { color: var(--green-500); }
+.device-status.offline { color: var(--gray-400); }
+
+/* ===================== DEVICE ADDRESS ===================== */
+
+.device-address-card {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
 }
 
-.device-status.offline {
-  color: #9aa0a6;
+.address-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.address-value {
+  display: block;
+  font-size: 12.5px;
+  color: var(--gray-600);
+  font-style: italic;
+  margin-top: 4px;
+  line-height: 1.5;
 }
 
 /* ===================== STATS GRID ===================== */
@@ -319,18 +434,22 @@ html, body {
 
 .stat-item {
   padding: 12px;
-  border-radius: 10px;
-  background: #f8f9fa;
-  border: 1px solid #e8eaed;
+  border-radius: var(--radius-sm);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
+.stat-item.stat-full {
+  grid-column: 1 / -1;
+}
+
 .stat-label {
   font-size: 10.5px;
   font-weight: 600;
-  color: #5f6368;
+  color: var(--gray-500);
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
@@ -338,15 +457,52 @@ html, body {
 .stat-value {
   font-size: 14px;
   font-weight: 600;
-  color: #202124;
+  color: var(--gray-900);
   font-variant-numeric: tabular-nums;
 }
+
+.stat-address {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--gray-600);
+  font-style: italic;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* ===================== BATTERY BAR ===================== */
+
+.battery-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.battery-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--gray-200);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.battery-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+  background: var(--green-500);
+}
+
+.battery-fill.bat-ok       { background: var(--green-500); }
+.battery-fill.bat-low      { background: var(--yellow-400); }
+.battery-fill.bat-critical { background: var(--red-400); }
 
 /* ===================== BUTTONS ===================== */
 
 .actions {
   display: flex;
   flex-direction: column;
+  gap: 8px;
 }
 
 .btn {
@@ -356,7 +512,7 @@ html, body {
   gap: 8px;
   padding: 12px 20px;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   font-size: 14px;
   font-weight: 600;
   font-family: inherit;
@@ -369,13 +525,13 @@ html, body {
 }
 
 .btn-primary {
-  background: #1a73e8;
+  background: var(--blue-500);
   color: #ffffff;
   box-shadow: 0 2px 8px rgba(26, 115, 232, 0.28);
 }
 
 .btn-primary:hover {
-  background: #1565c0;
+  background: var(--blue-600);
   box-shadow: 0 4px 14px rgba(26, 115, 232, 0.40);
 }
 
@@ -385,13 +541,23 @@ html, body {
   box-shadow: none;
 }
 
+.btn-secondary {
+  background: var(--gray-50);
+  color: var(--gray-600);
+  border: 1px solid var(--gray-200);
+}
+
+.btn-secondary:hover {
+  background: var(--gray-100);
+  border-color: #ccc;
+}
+
 .btn-icon {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
 }
 
-/* Loading spinner */
 .btn.loading {
   position: relative;
 }
@@ -420,9 +586,10 @@ html, body {
 
 .sidebar-footer {
   padding: 13px 20px;
-  border-top: 1px solid #e8eaed;
+  padding-bottom: calc(13px + var(--safe-bottom));
+  border-top: 1px solid var(--gray-200);
   font-size: 11px;
-  color: #9aa0a6;
+  color: var(--gray-400);
   text-align: center;
   flex-shrink: 0;
 }
@@ -437,7 +604,6 @@ html, body {
 
 /* ===================== CUSTOM MARKERS ===================== */
 
-/* Marker thiết bị (pin + sóng radar) */
 .device-pin {
   position: relative;
   width: 24px;
@@ -460,7 +626,7 @@ html, body {
   height: 13px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  background: #1a73e8;
+  background: var(--blue-500);
   border: 2.5px solid #ffffff;
   box-shadow: 0 1px 6px rgba(0,0,0,0.4);
 }
@@ -475,7 +641,6 @@ html, body {
   100% { transform: scale(1.8); opacity: 0; }
 }
 
-/* Marker "bạn" - vòng xanh mặc định của dot */
 .my-pulse {
   animation: marker-pulse 1.5s ease-out infinite;
 }
@@ -489,7 +654,7 @@ html, body {
 
 .leaflet-control-layers {
   border-radius: 10px !important;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.14) !important;
+  box-shadow: var(--shadow-md) !important;
   font-family: inherit !important;
 }
 
@@ -499,9 +664,9 @@ html, body {
 }
 
 .leaflet-popup-content-wrapper {
-  border-radius: 12px !important;
+  border-radius: var(--radius-md) !important;
   font-family: inherit !important;
-  box-shadow: 0 6px 24px rgba(0,0,0,0.18) !important;
+  box-shadow: var(--shadow-lg) !important;
 }
 
 .leaflet-popup-content {
@@ -512,26 +677,69 @@ html, body {
 
 .pop-title {
   font-weight: 700;
-  margin-bottom: 4px;
-  color: #202124;
+  margin-bottom: 2px;
+  color: var(--gray-900);
 }
 
-.pop-row {
-  color: #5f6368;
-  font-size: 12px;
+.pop-addr {
+  font-size: 11.5px;
+  color: var(--gray-500);
+  font-style: italic;
+  line-height: 1.4;
 }
 
 .pop-dist {
-  color: #1a73e8;
+  color: var(--blue-500);
   font-weight: 600;
   margin-top: 4px;
 }
 
-/* ===================== RESPONSIVE ===================== */
+/* ===================== MOBILE RESPONSIVE ===================== */
 
 @media (max-width: 768px) {
+  .hamburger {
+    display: flex;
+  }
+
   #sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
     width: 300px;
     min-width: 300px;
+    height: 100vh;
+    transform: translateX(-100%);
+    box-shadow: none;
+    z-index: 1100;
+  }
+
+  #sidebar.open {
+    transform: translateX(0);
+    box-shadow: 4px 0 30px rgba(0,0,0,0.2);
+  }
+
+  .overlay {
+    display: block;
+    pointer-events: none;
+  }
+
+  .overlay.open {
+    pointer-events: auto;
+  }
+
+  #map {
+    width: 100vw;
+  }
+}
+
+/* ===================== STANDALONE PWA ===================== */
+
+@media (display-mode: standalone) {
+  .sidebar-header {
+    padding-top: calc(24px + var(--safe-top));
+  }
+
+  .hamburger {
+    top: calc(16px + var(--safe-top));
   }
 }

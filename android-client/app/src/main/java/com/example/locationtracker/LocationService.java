@@ -6,18 +6,23 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.media.RingtoneManager;
 import android.net.Uri;
+import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
@@ -95,6 +100,19 @@ public class LocationService extends Service {
     private Handler alarmHandler;
     private final Runnable alarmTimeoutRunnable = this::stopAlarmSound;
 
+    // ---- Battery ----
+    private final BroadcastReceiver batteryReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            int level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+            int scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+            if (level >= 0 && scale > 0) {
+                batteryPercent = (int) Math.round(level * 100.0 / scale);
+            }
+        }
+    };
+    private int batteryPercent = -1;
+
     /* ===================================================================== */
     /* LIFECYCLE                                                             */
     /* ===================================================================== */
@@ -106,6 +124,9 @@ public class LocationService extends Service {
 
         audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
         alarmHandler = new Handler(Looper.getMainLooper());
+
+        // Đọc mức pin thật và cache lại để đẩy lên Firebase cùng tọa độ
+        registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
 
         // Firebase
         ensureFirebaseInitialized();
@@ -151,6 +172,11 @@ public class LocationService extends Service {
         // Dừng MediaPlayer nếu đang phát
         stopAlarmSound();
 
+        try {
+            unregisterReceiver(batteryReceiver);
+        } catch (Exception ignored) {
+        }
+
         super.onDestroy();
     }
 
@@ -188,6 +214,9 @@ public class LocationService extends Service {
         updates.put("lat", round(location.getLatitude(), 6));
         updates.put("lng", round(location.getLongitude(), 6));
         updates.put("timestamp", System.currentTimeMillis() / 1000L);
+        if (batteryPercent >= 0) {
+            updates.put("battery", batteryPercent);
+        }
 
         deviceRef.updateChildren(updates)
                 .addOnSuccessListener(aVoid ->
@@ -223,6 +252,9 @@ public class LocationService extends Service {
 
                 if ("PLAY_SOUND".equals(command)) {
                     playAlarmSound();
+                } else if ("VOLUME_UP".equals(command)) {
+                    increaseAlarmVolume();
+                    resetCommandToNone();
                 }
             }
 
@@ -324,6 +356,28 @@ public class LocationService extends Service {
             commandRef.setValue("NONE")
                     .addOnSuccessListener(aVoid -> Log.d(TAG, "Command đã reset về NONE"))
                     .addOnFailureListener(e -> Log.e(TAG, "Reset command thất bại: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Tăng âm lượng của stream ALARM lên một nấc (xử lý lệnh "VOLUME_UP").
+     * Khác với PLAY_SOUND (tự phát âm thanh), đây chỉ điều chỉnh volume
+     * để khi phát chuông báo động sẽ to hơn.
+     */
+    private void increaseAlarmVolume() {
+        try {
+            int maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM);
+            int curVol = audioManager.getStreamVolume(AudioManager.STREAM_ALARM);
+            int newVol = Math.min(maxVol, curVol + 1);
+            audioManager.setStreamVolume(AudioManager.STREAM_ALARM, newVol, 0);
+
+            Log.d(TAG, "Tăng âm lượng báo thức: " + curVol + " -> " + newVol + " / " + maxVol);
+            Toast.makeText(this, "Âm lượng báo động: " + newVol + "/" + maxVol, Toast.LENGTH_SHORT).show();
+
+            // Bật notifyVolumOff only nếu cần: dòng dưới tạm để 0 (không show UI) cho nhẹ
+            // setStreamVolume đang dùng flag 0 nên người dùng không thấy slider hệ thống.
+        } catch (Exception e) {
+            Log.e(TAG, "Lỗi tăng âm lượng: " + e.getMessage());
         }
     }
 

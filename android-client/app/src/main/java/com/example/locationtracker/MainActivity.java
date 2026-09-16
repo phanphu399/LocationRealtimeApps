@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.view.View;
 import android.widget.ProgressBar;
@@ -54,6 +55,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int REQUEST_LOCATION_PERMISSION = 1001;
     private static final int REQUEST_NOTIFICATION_PERMISSION = 1002;
+    private static final int REQUEST_IGNORE_BATTERY_OPTIMIZATIONS = 1003;
 
     private static final String DEVICE_PATH = FirebaseConfig.DEVICE_PATH;
 
@@ -79,6 +81,8 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvBattery;
     private ProgressBar pbBattery;
     private View vFirebaseDot;
+    private TextView tvIgnoreBattery;
+    private MaterialButton btnAskIgnoreBattery;
 
     private DatabaseReference deviceRef;
     private DatabaseReference connectedRef;
@@ -129,6 +133,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         refreshServiceStatus();
+        updateBatteryIgnoreUi();
     }
 
     @Override
@@ -165,6 +170,8 @@ public class MainActivity extends AppCompatActivity {
 
         MaterialButton btnStart = findViewById(R.id.btnStart);
         MaterialButton btnStop = findViewById(R.id.btnStop);
+        tvIgnoreBattery = findViewById(R.id.tvIgnoreBattery);
+        btnAskIgnoreBattery = findViewById(R.id.btnAskIgnoreBattery);
 
         btnStart.setOnClickListener(v -> onStartClicked());
         btnStop.setOnClickListener(v -> {
@@ -172,6 +179,46 @@ public class MainActivity extends AppCompatActivity {
             refreshServiceStatus();
             Toast.makeText(this, "Đã dừng service", Toast.LENGTH_SHORT).show();
         });
+        btnAskIgnoreBattery.setOnClickListener(v -> requestIgnoreBatteryOptimizations());
+    }
+
+    /** Kiểm tra xem app có nằm trong danh sách loại trừ tối ưu hóa pin (Android 6+) hay không. */
+    private boolean isIgnoringBatteryOptimizations() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true;
+        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        return pm.isIgnoringBatteryOptimizations(getPackageName());
+    }
+
+    private void updateBatteryIgnoreUi() {
+        if (tvIgnoreBattery == null) return;
+        boolean ignoring = isIgnoringBatteryOptimizations();
+        if (ignoring) {
+            tvIgnoreBattery.setText("Đã cấp quyền - app sẽ không bị hệ thống đóng khi chạy ngầm.");
+            tvIgnoreBattery.setTextColor(ContextCompat.getColor(this, R.color.online_green));
+            btnAskIgnoreBattery.setEnabled(false);
+            btnAskIgnoreBattery.setAlpha(0.5f);
+        } else {
+            tvIgnoreBattery.setText("App có thể bị hệ thống đóng để tiết kiệm pin. Nên cấp quyền nếu muốn theo dõi liên tục.");
+            tvIgnoreBattery.setTextColor(ContextCompat.getColor(this, R.color.offline_red));
+            btnAskIgnoreBattery.setEnabled(true);
+            btnAskIgnoreBattery.setAlpha(1f);
+        }
+    }
+
+    /** Mở hộp thoại hệ thống để người dùng bật "Không hạn chế pin" (Android 6+). */
+    private void requestIgnoreBatteryOptimizations() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || isIgnoringBatteryOptimizations()) {
+            updateBatteryIgnoreUi();
+            return;
+        }
+        Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+        intent.setData(Uri.parse("package:" + getPackageName()));
+        try {
+            startActivityForResult(intent, REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+        } catch (Exception e) {
+            Toast.makeText(this, "Thiết bị không hỗ trợ. Hãy tự mở Cài đặt > Pin để cấu hình.", Toast.LENGTH_LONG).show();
+            openAppSettings();
+        }
     }
 
     private void ensureFirebaseInitialized() {
@@ -278,6 +325,10 @@ public class MainActivity extends AppCompatActivity {
     private void onStartClicked() {
         if (hasAllPermissions()) {
             startTrackerService();
+            // Gợi ý bật "Không hạn chế pin" để service chạy ngầm ổn định
+            if (!isIgnoringBatteryOptimizations()) {
+                requestIgnoreBatteryOptimizations();
+            }
         } else {
             requestPermissions(REQUIRED_PERMISSIONS, REQUEST_LOCATION_PERMISSION);
         }
@@ -324,6 +375,14 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 Toast.makeText(this, "Cần cấp quyền vị trí để sử dụng", Toast.LENGTH_LONG).show();
             }
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) {
+            updateBatteryIgnoreUi();
         }
     }
 

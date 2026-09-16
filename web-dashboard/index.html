@@ -2,17 +2,28 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>GPS Realtime Tracker</title>
+  <meta name="theme-color" content="#1a73e8" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <link rel="icon" type="image/png" href="icons/favicon.png" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
   <div id="app">
+    <!-- ========== HAMBURGER (mobile) ========== -->
+    <button id="btnToggle" class="hamburger" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+    <div id="overlay" class="overlay"></div>
+
     <!-- ========== SIDEBAR ========== -->
     <aside id="sidebar">
-      <!-- Header + kết nối -->
       <div class="sidebar-header">
         <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
@@ -28,23 +39,14 @@
       </div>
 
       <div class="sidebar-body">
-        <!-- Vị trí của bạn (browser geolocation) -->
+        <!-- Vị trí của bạn -->
         <div class="my-location-card">
           <div class="section-title-row">
             <span class="title-dot blue"></span>
             <span class="section-title">Vị trí của bạn</span>
             <span class="badge">Trình duyệt</span>
           </div>
-          <div class="my-coords">
-            <div class="coord-block">
-              <label>LAT</label>
-              <span id="myLat">--</span>
-            </div>
-            <div class="coord-block">
-              <label>LNG</label>
-              <span id="myLng">--</span>
-            </div>
-          </div>
+          <div id="myAddress" class="my-address">Đang xác định vị trí...</div>
           <div class="my-meta">
             <span id="myAccuracy">Đang xin phép vị trí...</span>
           </div>
@@ -74,23 +76,32 @@
           </div>
         </div>
 
+        <!-- Địa chỉ thiết bị -->
+        <div class="device-address-card" id="deviceAddressCard">
+          <span class="address-label">Địa chỉ</span>
+          <span class="address-value" id="deviceAddress">--</span>
+        </div>
+
         <!-- Stats -->
         <div class="stats-grid">
           <div class="stat-item">
-            <span class="stat-label">Vĩ độ (Lat)</span>
-            <span class="stat-value" id="statLat">--</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">Kinh độ (Lng)</span>
-            <span class="stat-value" id="statLng">--</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">Cập nhật cách đây</span>
+            <span class="stat-label">Thời gian cập nhật</span>
             <span class="stat-value" id="statTime">--</span>
           </div>
           <div class="stat-item">
-            <span class="stat-label">Khoảng cách tới bạn</span>
+            <span class="stat-label">Khoảng cách</span>
             <span class="stat-value" id="statDistance">--</span>
+          </div>
+          <div class="stat-item stat-full">
+            <span class="stat-label">Địa chỉ</span>
+            <span class="stat-value stat-address" id="statAddress">--</span>
+          </div>
+          <div class="stat-item" id="batteryStatItem">
+            <span class="stat-label">Pin</span>
+            <div class="battery-row">
+              <span class="stat-value" id="statBattery">--</span>
+              <div class="battery-bar"><div class="battery-fill" id="batteryFill"></div></div>
+            </div>
           </div>
         </div>
 
@@ -104,11 +115,28 @@
             </svg>
             <span>Phát âm thanh</span>
           </button>
+          <button id="btnVolumeUp" class="btn btn-primary">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <line x1="23" y1="9" x2="17" y2="15"/>
+              <line x1="17" y1="9" x2="23" y2="15"/>
+            </svg>
+            <span>Tăng âm lượng</span>
+          </button>
+          <button id="btnFitMap" class="btn btn-secondary">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M15 3h6v6"/>
+              <path d="M9 21H3v-6"/>
+              <path d="M21 3l-7 7"/>
+              <path d="M3 21l7-7"/>
+            </svg>
+            <span>Vừa khung bản đồ</span>
+          </button>
         </div>
       </div>
 
       <div class="sidebar-footer">
-        <span>Firebase Realtime DB · cập nhật theo thời gian thực</span>
+        <span>GPS Tracker v2.0 · Firebase Realtime DB</span>
       </div>
     </aside>
 
