@@ -52,10 +52,19 @@ const DEVICE_TTL_MS = 60_000;
 const TARGET_DEVICE = "device_android_01";
 const GEOCODE_COOLDOWN_MS = 10_000;
 
+// ---- GPS drift / jitter filtering ----
+const MIN_STEP_M = 10;          // bỏ qua nhiễu GPS dưới 10 m (không cập nhật marker)
+const MAX_JUMP_M = 400;         // bỏ qua lỗi nhảy xa kiểu "teleport" (> 400 m)
+const SMOOTH_ALPHA = 0.35;      // hệ số làm mượt vị trí (lower = mượt hơn, chậm hơn)
+
 let myPos = null;
 let myMarker = null;
 let myAccuracyCircle = null;
 let firstFixDone = false;
+let lastGeoTime = 0;
+let smoothMyLat = 0;
+let smoothMyLng = 0;
+const renderedDevicePos = {};
 const newDeviceFitted = {};
 const deviceMarkers = {};
 const deviceData = {};
@@ -160,13 +169,44 @@ onValue(ref(db, ".info/connected"), (snap) => {
 
 function onGeoSuccess(position) {
   const { latitude, longitude, accuracy } = position.coords;
-  const firstTime = !myPos;
-  myPos = [latitude, longitude];
+  const now = position.timestamp || Date.now();
+  const candidate = [latitude, longitude];
 
   myAccuracy.textContent = `Độ chính xác ±${Math.round(accuracy)} m · tự cập nhật`;
 
-  reverseGeocode(latitude, longitude).then(addr => {
-    myAddress.textContent = getShortAddress(addr) || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+  // Lọc nhiễu GPS: nếu chưa có vị trí thì chấp nhận luôn, ngược lại phải qua kiểm tra
+  if (myPos) {
+    const moved = haversine(myPos, candidate);
+    const dtSec = Math.max(1, (now - lastGeoTime) / 1000);
+
+    // Teleport / fix lỗi GPS: nhảy quá nhanh trong thời gian ngắn -> bỏ qua
+    if (moved > MAX_JUMP_M && dtSec < 5) {
+      return;
+    }
+
+    // Dead-zone: di chuyển < MIN_STEP_M (hoặc < độ chính xác GPS) -> không rung marker
+    const threshold = Math.max(MIN_STEP_M, accuracy);
+    if (moved < threshold) {
+      lastGeoTime = now;
+      return;
+    }
+  }
+
+  lastGeoTime = now;
+
+  // Exponential smoothing để marker không giật/chạy chéo từng mẩu nhỏ
+  if (smoothMyLat === 0 && smoothMyLng === 0) {
+    smoothMyLat = latitude;
+    smoothMyLng = longitude;
+  } else {
+    smoothMyLat += (latitude - smoothMyLat) * SMOOTH_ALPHA;
+    smoothMyLng += (longitude - smoothMyLng) * SMOOTH_ALPHA;
+  }
+  const firstTime = !myPos;
+  myPos = [smoothMyLat, smoothMyLng];
+
+  reverseGeocode(smoothMyLat, smoothMyLng).then(addr => {
+    myAddress.textContent = getShortAddress(addr) || `${smoothMyLat.toFixed(6)}, ${smoothMyLng.toFixed(6)}`;
   });
 
   if (myMarker) {
@@ -281,6 +321,12 @@ function upsertDeviceMarker(deviceId) {
   const latLng = [d.lat, d.lng];
 
   if (deviceMarkers[deviceId]) {
+    // Dead-zone: không di chuyển marker nếu lệch dưới 10 m (tránh giật/rung)
+    const prev = renderedDevicePos[deviceId];
+    if (prev && haversine(prev, latLng) < MIN_STEP_M) {
+      return;
+    }
+    renderedDevicePos[deviceId] = latLng;
     deviceMarkers[deviceId].setLatLng(latLng);
     buildPopup(deviceId).then(html => {
       deviceMarkers[deviceId].setPopupContent(html);
@@ -301,6 +347,7 @@ function upsertDeviceMarker(deviceId) {
 
   const marker = L.marker(latLng, { icon }).addTo(map);
   deviceMarkers[deviceId] = marker;
+  renderedDevicePos[deviceId] = latLng;
 
   buildPopup(deviceId).then(html => {
     marker.bindPopup(html);
