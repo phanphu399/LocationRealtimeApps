@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.locationtracker">
+
+    <!-- ===================== PERMISSIONS ===================== -->
+    <!-- Quyền mạng: cần thiết để đẩy dữ liệu lên Firebase -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Quyền vị trí khi app đang mở (foreground) -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <!-- Quyền vị trí khi app chạy ngầm (API 30+) - phải xin qua Settings screen -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
+    <!-- Quyền chạy Foreground Service (được bảo vệ đặc biệt, cần trong Manifest) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Dành riêng cho Foreground Service loại "location" (Android 14 / API 34+) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
+    <application
+        android:allowBackup="true"
+        android:label="GPS Tracker"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+
+        <!--
+            LocationService: Foreground Service dùng để lấy tọa độ liên tục.
+            foregroundServiceType="location" bắt buộc cho FGS lấy vị trí
+            (Android 10+/14+ sẽ từ chối khởi động nếu thiếu thuộc tính này).
+        -->
+        <service
+            android:name=".LocationService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+        <!-- Activity khởi chạy đầu tiên (launcher) -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

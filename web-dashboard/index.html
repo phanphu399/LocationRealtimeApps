@@ -8,7 +8,78 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="map"></div>
+
+  <div id="app">
+    <!-- ========== SIDEBAR ========== -->
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+          <circle cx="12" cy="10" r="3"/>
+        </svg>
+        <h1>GPS Tracker</h1>
+      </div>
+
+      <div class="sidebar-body">
+        <!-- Device card -->
+        <div class="device-card">
+          <div class="device-avatar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+              <line x1="12" y1="18" x2="12.01" y2="18"/>
+            </svg>
+          </div>
+          <div class="device-info">
+            <span class="device-name" id="deviceName">device_android_01</span>
+            <span class="device-status" id="deviceStatus">Đang chờ tín hiệu...</span>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Vĩ độ (Lat)</span>
+            <span class="stat-value" id="statLat">--</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Kinh độ (Lng)</span>
+            <span class="stat-value" id="statLng">--</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Cập nhật</span>
+            <span class="stat-value" id="statTime">--</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Pin</span>
+            <span class="stat-value battery" id="statBattery">
+              <span class="battery-icon">&#9889;</span>
+              <span id="batteryValue">--</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="actions">
+          <button id="btnPlaySound" class="btn btn-primary">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+            </svg>
+            <span>Phát âm thanh</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <span>Firebase Realtime DB</span>
+      </div>
+    </aside>
+
+    <!-- ========== MAP ========== -->
+    <div id="map"></div>
+  </div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="app.js"></script>
 </body>

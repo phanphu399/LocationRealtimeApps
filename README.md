@@ -13,6 +13,11 @@ location_app_realtime/
 ├── background-tracker/     # Backend - Python GPS simulator
 │   ├── tracker.py
 │   └── requirements.txt
+├── android-client/         # Android (Java) - real device GPS tracker
+│   ├── AndroidManifest.xml   # Permissions + LocationService declaration
+│   ├── build.gradle          # Firebase / Play Services dependencies
+│   ├── LocationService.java  # Foreground Service (GPS 5s → Firebase)
+│   └── MainActivity.java     # Runtime permission + start service
 ├── start.py                # One-click launcher (dashboard + tracker)
 ├── firebaseConfig.txt      # Firebase configuration reference
 └── README.md
@@ -24,8 +29,27 @@ location_app_realtime/
 | ---------------- | ------------------------------------------- |
 | Map              | [LeafletJS](https://leafletjs.com) + OSM   |
 | Realtime DB      | Firebase Realtime Database                  |
-| Tracker          | Python 3 + `requests`                       |
+| Tracker (sim)    | Python 3 + `requests`                       |
+| Tracker (Android)| Java, Foreground Service + FusedLocation   |
 | Web Server       | Python `http.server`                        |
+
+## Android Client (thay thế tool giả lập Python)
+
+`android-client/` là mã nguồn Android (Java) để thay thế tool giả lập Python: thay vì tọa độ giả, **LocationService** sẽ lấy tọa độ GPS thật từ thiết bị và đẩy lên Firebase Realtime DB.
+
+- **Đường dẫn đẩy dữ liệu:** `/devices/device_android_01` (cùng cấu trúc `{lat, lng, timestamp}` với tracker Python → web dashboard render được ngay).
+- **Cấu hình Firebase** đọc từ `firebaseConfig.txt` (`databaseURL: https://locationrealtimeapps-default-rtdb.firebaseio.com`).
+- **Permission flow:** `MainActivity` xin `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`, `ACCESS_BACKGROUND_LOCATION` rồi gọi `startForegroundService()` → `LocationService` chạy ngầm, cập nhật vị trí mỗi 5 giây bằng `FusedLocationProviderClient`.
+
+### Copy vào Android Studio
+
+1. Tạo project mới với package `com.example.locationtracker`.
+2. Copy `AndroidManifest.xml`, `LocationService.java`, `MainActivity.java` vào `app/src/main/java/com/example/locationtracker/`.
+3. Copy dependencies từ `build.gradle` vào `app/build.gradle`.
+4. Chạy trên thiết bị thật (FusedLocation cần GPS/Play Services).
+5. Bật quyền "Allow all the time" cho app trên Android 11+ để lấy tọa độ khi chạy ngầm.
+
+> Lưu ý: có thể bỏ quyền `ACCESS_BACKGROUND_LOCATION` nếu chỉ cần chạy khi app đang mở.
 
 ## Quick Start
 

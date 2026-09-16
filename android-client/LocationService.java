@@ -1,0 +1,399 @@
+package com.example.locationtracker;
+
+import android.annotation.SuppressLint;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.app.Service;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.location.Location;
+import android.media.AudioManager;
+import android.media.MediaPlayer;
+import android.media.RingtoneManager;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Handler;
+import android.os.IBinder;
+import android.os.Looper;
+import android.util.Log;
+
+import androidx.annotation.Nullable;
+import androidx.core.app.ActivityCompat;
+
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationCallback;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationResult;
+import com.google.android.gms.location.LocationServices;
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.FirebaseOptions;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
+
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * LocationService
+ * ---------------
+ * Foreground Service chạy ngầm, thực hiện 2 chức năng chính:
+ *
+ *  1. LẤY TỌA ĐỘ GPS: Dùng FusedLocationProviderClient lấy vị trí mỗi 5 giây,
+ *     đẩy {lat, lng, timestamp} lên Firebase path /devices/device_android_01.
+ *
+ *  2. LẮNG NGHE LỆNH "PLAY_SOUND": Lắng nghe liên tục field "command" trên
+ *     Firebase. Khi web dashboard gửi giá trị "PLAY_SOUND", service sẽ:
+ *       a. Ép âm lượng báo thức tối đa (AudioManager)
+ *       b. Phát âm thanh báo động (alarm ringtone) qua MediaPlayer
+ *       c. Sau 10 giây -> dừng phát + ghi lại giá trị "NONE" vào Firebase
+ */
+public class LocationService extends Service {
+
+    private static final String TAG = "LocationService";
+
+    // ---- Cấu hình Firebase (Đồng bộ với firebaseConfig.txt) ----
+    private static final String FIREBASE_API_KEY = "AIzaSyD_mMdWjE7xcI4fqAX03iP5p4joq1af838";
+    private static final String FIREBASE_DATABASE_URL = "https://locationrealtimeapps-default-rtdb.firebaseio.com";
+    private static final String FIREBASE_PROJECT_ID = "locationrealtimeapps";
+    private static final String FIREBASE_APP_ID = "1:549557847899:web:18339736baa351804c3c7e";
+
+    // Định danh thiết bị trên Realtime DB
+    private static final String DEVICE_PATH = "devices/device_android_01";
+
+    // ---- Cấu hình location ----
+    private static final long UPDATE_INTERVAL_MS = 5000L;
+
+    // ---- Cấu hình phát âm thanh ----
+    private static final long ALARM_DURATION_MS = 10_000L; // Tối đa 10 giây
+
+    // ---- Notification ----
+    private static final String CHANNEL_ID = "location_channel";
+    private static final int NOTIFICATION_ID = 1001;
+
+    // ---- FusedLocation ----
+    private FusedLocationProviderClient fusedLocationClient;
+    private LocationCallback locationCallback;
+
+    // ---- Firebase ----
+    private DatabaseReference deviceRef;
+    private ValueEventListener commandListener;
+
+    // ---- Alarm / Sound ----
+    private MediaPlayer mediaPlayer;
+    private AudioManager audioManager;
+    private Handler alarmHandler;
+    private final Runnable alarmTimeoutRunnable = this::stopAlarmSound;
+
+    /* ===================================================================== */
+    /* LIFECYCLE                                                             */
+    /* ===================================================================== */
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        Log.d(TAG, "onCreate - khởi tạo service");
+
+        audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
+        alarmHandler = new Handler(Looper.getMainLooper());
+
+        // Firebase
+        ensureFirebaseInitialized();
+        deviceRef = FirebaseDatabase.getInstance().getReference(DEVICE_PATH);
+
+        // Location
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+        buildLocationCallback();
+        createNotificationChannel();
+
+        // Lắng nghe lệnh từ Firebase (PLAY_SOUND)
+        startCommandListener();
+    }
+
+    /**
+     * START_STICKY: nếu hệ thống kill service -> Android tự khởi động lại.
+     */
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        Log.d(TAG, "onStartCommand - bắt đầu foreground + lấy vị trí");
+        startForeground(NOTIFICATION_ID, buildNotification());
+        startLocationUpdates();
+        return START_STICKY;
+    }
+
+    @Override
+    public void onDestroy() {
+        Log.d(TAG, "onDestroy - dọn dẹp tài nguyên");
+
+        // Dừng location
+        if (fusedLocationClient != null && locationCallback != null) {
+            fusedLocationClient.removeLocationUpdates(locationCallback);
+        }
+
+        // Bỏ lắng nghe lệnh
+        if (commandListener != null && deviceRef != null) {
+            deviceRef.child("command").removeEventListener(commandListener);
+        }
+
+        // Dừng MediaPlayer nếu đang phát
+        stopAlarmSound();
+
+        super.onDestroy();
+    }
+
+    @Nullable
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null;
+    }
+
+    /* ===================================================================== */
+    /* FIREBASE - INIT & LOCATION WRITE                                      */
+    /* ===================================================================== */
+
+    private void ensureFirebaseInitialized() {
+        if (!FirebaseApp.getApps(this).isEmpty()) return;
+
+        FirebaseOptions options = new FirebaseOptions.Builder()
+                .setApplicationId(FIREBASE_APP_ID)
+                .setApiKey(FIREBASE_API_KEY)
+                .setDatabaseUrl(FIREBASE_DATABASE_URL)
+                .setProjectId(FIREBASE_PROJECT_ID)
+                .build();
+
+        FirebaseApp.initializeApp(this, options);
+        Log.d(TAG, "Firebase đã khởi tạo với databaseURL: " + FIREBASE_DATABASE_URL);
+    }
+
+    /**
+     * Ghi tọa độ lên Firebase bằng updateChildren (KHÔNG ghi đè field "command").
+     * Giá trị "command" sẽ do web dashboard đặt thành "PLAY_SOUND"
+     * và service sẽ tự đặt lại "NONE" khi hoàn tất.
+     */
+    private void writeLocationToFirebase(Location location) {
+        Map<String, Object> updates = new HashMap<>();
+        updates.put("lat", round(location.getLatitude(), 6));
+        updates.put("lng", round(location.getLongitude(), 6));
+        updates.put("timestamp", System.currentTimeMillis() / 1000L);
+
+        deviceRef.updateChildren(updates)
+                .addOnSuccessListener(aVoid ->
+                        Log.d(TAG, "Đẩy tọa độ OK: lat=" + updates.get("lat") + ", lng=" + updates.get("lng")))
+                .addOnFailureListener(e ->
+                        Log.e(TAG, "Đẩy tọa độ thất bại: " + e.getMessage()));
+    }
+
+    /* ===================================================================== */
+    /* FIREBASE - COMMAND LISTENER (PLAY_SOUND)                              */
+    /* ===================================================================== */
+
+    /**
+     * Bắt đầu lắng nghe node "command" trên Firebase.
+     * Khi web dashboard ghi giá trị "PLAY_SOUND" -> service sẽ phát âm thanh.
+     */
+    private void startCommandListener() {
+        commandListener = new ValueEventListener() {
+            @Override
+            public void onDataChange(DataSnapshot snapshot) {
+                String command = snapshot.getValue(String.class);
+                if (command == null) return;
+
+                Log.d(TAG, "Nhận lệnh từ Firebase: " + command);
+
+                if ("PLAY_SOUND".equals(command)) {
+                    playAlarmSound();
+                }
+            }
+
+            @Override
+            public void onCancelled(DatabaseError error) {
+                Log.e(TAG, "Lỗi khi đọc lệnh: " + error.getMessage());
+            }
+        };
+
+        deviceRef.child("command").addValueEventListener(commandListener);
+        Log.d(TAG, "Đăng ký lắng nghe lệnh PLAY_SOUND tại /devices/device_android_01/command");
+    }
+
+    /* ===================================================================== */
+    /* ALARM / PLAY SOUND                                                    */
+    /* ===================================================================== */
+
+    /**
+     * Phát âm thanh báo động:
+     *  1. Lấy ringtone mặc định (TYPE_ALARM ưu tiên, nếu không có dùng TYPE_RINGTONE).
+     *  2. Ép volume về MAX (mức MAX_STREAM_ALARM).
+     *  3. Dùng MediaPlayer.loop() để lặp liên tục.
+     *  4. Sau ALARM_DURATION_MS (10 giây) -> tự dừng và ghi "NONE" lên Firebase.
+     */
+    private void playAlarmSound() {
+        // Nếu đang phát rồi -> dừng trước khi phát lại
+        stopAlarmSound();
+
+        try {
+            // Đặt âm lượng MAX cho stream ALARM
+            int maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM);
+            audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxVol, 0);
+
+            // Lấy URI ringtone (ưu tiên alarm, fallback ringtone)
+            Uri alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+            if (alarmUri == null) {
+                alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
+            }
+
+            if (alarmUri == null) {
+                Log.e(TAG, "Không tìm thấy ringtone nào trên thiết bị");
+                return;
+            }
+
+            // Tạo MediaPlayer và phát
+            mediaPlayer = new MediaPlayer();
+            mediaPlayer.setDataSource(this, alarmUri);
+            mediaPlayer.setAudioAttributes(
+                    new android.media.AudioAttributes.Builder()
+                            .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+            );
+            mediaPlayer.setLooping(true);
+            mediaPlayer.prepare();
+            mediaPlayer.start();
+
+            Log.d(TAG, "Bắt đầu phát âm thanh báo động (tối đa " + ALARM_DURATION_MS / 1000 + " giây)");
+
+            // Tự dừng sau ALARM_DURATION_MS
+            alarmHandler.postDelayed(alarmTimeoutRunnable, ALARM_DURATION_MS);
+
+        } catch (Exception e) {
+            Log.e(TAG, "Lỗi khi phát âm thanh: " + e.getMessage());
+            resetCommandToNone();
+        }
+    }
+
+    /**
+     * Dừng phát âm thanh, giải phóng MediaPlayer, ghi lại "NONE" lên Firebase.
+     */
+    private void stopAlarmSound() {
+        // Bỏ timeout cũ
+        alarmHandler.removeCallbacks(alarmTimeoutRunnable);
+
+        if (mediaPlayer != null) {
+            try {
+                if (mediaPlayer.isPlaying()) {
+                    mediaPlayer.stop();
+                }
+                mediaPlayer.release();
+            } catch (Exception e) {
+                Log.e(TAG, "Lỗi khi dừng MediaPlayer: " + e.getMessage());
+            }
+            mediaPlayer = null;
+            Log.d(TAG, "Đã dừng phát âm thanh");
+        }
+
+        // Đặt lại command = "NONE" trên Firebase
+        resetCommandToNone();
+    }
+
+    /**
+     * Ghi giá trị "NONE" vào /devices/device_android_01/command
+     * để web dashboard biết lệnh đã được xử lý.
+     */
+    private void resetCommandToNone() {
+        if (deviceRef != null) {
+            deviceRef.child("command").setValue("NONE")
+                    .addOnSuccessListener(aVoid -> Log.d(TAG, "Command đã reset về NONE"))
+                    .addOnFailureListener(e -> Log.e(TAG, "Reset command thất bại: " + e.getMessage()));
+        }
+    }
+
+    /* ===================================================================== */
+    /* LOCATION                                                              */
+    /* ===================================================================== */
+
+    private void buildLocationCallback() {
+        locationCallback = new LocationCallback() {
+            @Override
+            public void onLocationResult(LocationResult locationResult) {
+                if (locationResult == null) return;
+                Location location = locationResult.getLastLocation();
+                if (location != null) {
+                    Log.d(TAG, String.format("Vị trí mới: %.6f, %.6f (acc=%.1fm)",
+                            location.getLatitude(), location.getLongitude(), location.getAccuracy()));
+                    writeLocationToFirebase(location);
+                }
+            }
+        };
+    }
+
+    @SuppressLint("MissingPermission")
+    private void startLocationUpdates() {
+        LocationRequest locationRequest = LocationRequest.create()
+                .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
+                .setInterval(UPDATE_INTERVAL_MS)
+                .setFastestInterval(UPDATE_INTERVAL_MS);
+
+        if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED
+                && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            Log.e(TAG, "Thiếu quyền vị trí - dừng service");
+            stopSelf();
+            return;
+        }
+
+        fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper());
+        Log.d(TAG, "Bắt đầu lấy vị trí mỗi " + UPDATE_INTERVAL_MS + "ms");
+    }
+
+    /* ===================================================================== */
+    /* NOTIFICATION                                                          */
+    /* ===================================================================== */
+
+    private Notification buildNotification() {
+        Intent appIntent = new Intent(this, MainActivity.class);
+        PendingIntent pendingIntent = PendingIntent.getActivity(
+                this, 0, appIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            return new Notification.Builder(this, CHANNEL_ID)
+                    .setContentTitle("GPS Tracker")
+                    .setContentText("Đang chạy ngầm lấy tọa độ")
+                    .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+                    .setOngoing(true)
+                    .setContentIntent(pendingIntent)
+                    .build();
+        } else {
+            return new Notification.Builder(this)
+                    .setContentTitle("GPS Tracker")
+                    .setContentText("Đang chạy ngầm lấy tọa độ")
+                    .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+                    .setOngoing(true)
+                    .setContentIntent(pendingIntent)
+                    .build();
+        }
+    }
+
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                    CHANNEL_ID, "Vị trí GPS", NotificationManager.IMPORTANCE_LOW);
+            channel.setDescription("Thông báo khi service đang lấy tọa độ");
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            if (manager != null) manager.createNotificationChannel(channel);
+        }
+    }
+
+    /* ===================================================================== */
+    /* UTILS                                                                 */
+    /* ===================================================================== */
+
+    private static double round(double value, int places) {
+        double factor = Math.pow(10, places);
+        return Math.round(value * factor) / factor;
+    }
+}

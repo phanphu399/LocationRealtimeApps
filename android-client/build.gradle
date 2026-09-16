@@ -1,0 +1,34 @@
+/**
+ * Android Gradle (Module level) - Dependencies
+ * Copy vào file android-client/app/build.gradle của bạn.
+ */
+
+dependencies {
+    // Firebase Bill of Materials (BOM) - quản lý version tự động cho mọi thư viện Firebase
+    implementation platform('com.google.firebase:firebase-bom:33.5.1')
+
+    // Firebase Realtime Database: nhận/lưu dữ liệu realtime (path: /devices)
+    implementation 'com.google.firebase:firebase-database'
+
+    // Google Play Services Location:
+    // + FusedLocationProviderClient: lấy tọa độ chính xác, tiết kiệm pin
+    // + LocationRequest/LocationCallback: cập nhật vị trí theo interval
+    implementation 'com.google.android.gms:play-services-location:21.3.0'
+
+    // AndroidX (UI & runtime cho Activity, theme, permission)
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.core:core:1.15.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.2.0'
+}
+
+/**
+ * GHI CHÚ KHI COPY VÀO ANDROID STUDIO:
+ * 1. Bạn cần bật plugin google-services ở root build.gradle và
+ *    thả file google-services.json vào thư mục app/ NẾU muốn Firebase
+ *    khởi tạo tự động. Tuy nhiên, trong LocationService.java tôi đã
+ *    khởi tạo FirebaseOptions thủ công bằng databaseURL trong
+ *    firebaseConfig.txt nên KHÔNG bắt buộc cần google-services.json.
+ *
+ * 2. Package mặc định của project này là: com.example.locationtracker
+ *    (đồng bộ với AndroidManifest.xml).
+ */
