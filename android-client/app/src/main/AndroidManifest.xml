@@ -19,11 +19,16 @@
     <!-- Dành riêng cho Foreground Service loại "location" (Android 14 / API 34+) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
+    <!-- Quyền hiển thị notification (Android 13 / API 33+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:allowBackup="true"
-        android:label="GPS Tracker"
+        android:icon="@drawable/ic_launcher"
+        android:roundIcon="@drawable/ic_launcher"
+        android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+        android:theme="@style/Theme.LocationTracker">
 
         <!--
             LocationService: Foreground Service dùng để lấy tọa độ liên tục.

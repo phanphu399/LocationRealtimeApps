@@ -12,17 +12,56 @@
   <div id="app">
     <!-- ========== SIDEBAR ========== -->
     <aside id="sidebar">
+      <!-- Header + kết nối -->
       <div class="sidebar-header">
         <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
           <circle cx="12" cy="10" r="3"/>
         </svg>
-        <h1>GPS Tracker</h1>
+        <div class="header-text">
+          <h1>GPS Tracker</h1>
+          <div class="conn-row">
+            <span id="connDot" class="conn-dot"></span>
+            <span id="connText">Đang kết nối Firebase...</span>
+          </div>
+        </div>
       </div>
 
       <div class="sidebar-body">
-        <!-- Device card -->
-        <div class="device-card">
+        <!-- Vị trí của bạn (browser geolocation) -->
+        <div class="my-location-card">
+          <div class="section-title-row">
+            <span class="title-dot blue"></span>
+            <span class="section-title">Vị trí của bạn</span>
+            <span class="badge">Trình duyệt</span>
+          </div>
+          <div class="my-coords">
+            <div class="coord-block">
+              <label>LAT</label>
+              <span id="myLat">--</span>
+            </div>
+            <div class="coord-block">
+              <label>LNG</label>
+              <span id="myLng">--</span>
+            </div>
+          </div>
+          <div class="my-meta">
+            <span id="myAccuracy">Đang xin phép vị trí...</span>
+          </div>
+        </div>
+
+        <!-- Danh sách thiết bị -->
+        <div class="section">
+          <div class="section-title-row">
+            <span class="title-dot green"></span>
+            <span class="section-title">Thiết bị theo dõi</span>
+          </div>
+          <div id="deviceList" class="device-list"></div>
+          <div id="deviceListEmpty" class="empty-hint">Chưa có dữ liệu từ thiết bị nào</div>
+        </div>
+
+        <!-- Chi tiết thiết bị -->
+        <div class="device-card" id="detailCard">
           <div class="device-avatar">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
@@ -46,15 +85,12 @@
             <span class="stat-value" id="statLng">--</span>
           </div>
           <div class="stat-item">
-            <span class="stat-label">Cập nhật</span>
+            <span class="stat-label">Cập nhật cách đây</span>
             <span class="stat-value" id="statTime">--</span>
           </div>
           <div class="stat-item">
-            <span class="stat-label">Pin</span>
-            <span class="stat-value battery" id="statBattery">
-              <span class="battery-icon">&#9889;</span>
-              <span id="batteryValue">--</span>
-            </span>
+            <span class="stat-label">Khoảng cách tới bạn</span>
+            <span class="stat-value" id="statDistance">--</span>
           </div>
         </div>
 
@@ -72,7 +108,7 @@
       </div>
 
       <div class="sidebar-footer">
-        <span>Firebase Realtime DB</span>
+        <span>Firebase Realtime DB · cập nhật theo thời gian thực</span>
       </div>
     </aside>
 

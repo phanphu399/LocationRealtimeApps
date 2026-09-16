@@ -14,6 +14,7 @@ html, body {
   font-family: 'Segoe UI', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
   background: #f0f2f5;
   overflow: hidden;
+  color: #202124;
 }
 
 /* ===================== APP LAYOUT ===================== */
@@ -33,7 +34,7 @@ html, body {
   display: flex;
   flex-direction: column;
   background: #ffffff;
-  box-shadow: 2px 0 16px rgba(0, 0, 0, 0.08);
+  box-shadow: 2px 0 20px rgba(0, 0, 0, 0.10);
   z-index: 1000;
 }
 
@@ -41,30 +42,213 @@ html, body {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 20px 24px;
+  padding: 20px 22px;
   background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%);
-  color: #fff;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .sidebar-header h1 {
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 600;
   letter-spacing: -0.3px;
 }
 
 .logo-icon {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   flex-shrink: 0;
+}
+
+/* Kết nối Firebase */
+.conn-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: #dce8ff;
+}
+
+.conn-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #fbbc04;
+  box-shadow: 0 0 0 0 rgba(251,188,4,0.6);
+}
+
+.conn-dot.online {
+  background: #4ade80;
+  animation: pulse-dot 1.6s infinite;
+}
+
+.conn-dot.offline {
+  background: #f87171;
+}
+
+@keyframes pulse-dot {
+  0%   { box-shadow: 0 0 0 0 rgba(74,222,128,0.7); }
+  70%  { box-shadow: 0 0 0 7px rgba(74,222,128,0); }
+  100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); }
 }
 
 .sidebar-body {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 14px;
+}
+
+/* ===================== SECTION TITLES ===================== */
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.title-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.title-dot.blue  { background: #1a73e8; }
+.title-dot.green { background: #34a853; }
+
+.section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #3c4043;
+  letter-spacing: 0.3px;
+}
+
+.badge {
+  margin-left: auto;
+  background: #e8f0fe;
+  color: #1a73e8;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+
+/* ===================== VỊ TRÍ CỦA BẠN ===================== */
+
+.my-location-card {
+  padding: 14px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #e3f2fd, #eaf6ff);
+  border: 1px solid #bbdefb;
+}
+
+.my-coords {
+  display: flex;
+  gap: 12px;
+}
+
+.coord-block {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.coord-block label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #5f6368;
+  letter-spacing: 0.6px;
+}
+
+.coord-block span {
+  font-size: 15px;
+  font-weight: 700;
+  color: #174ea6;
+  font-variant-numeric: tabular-nums;
+}
+
+.my-meta {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #5f6368;
+}
+
+/* ===================== DEVICE LIST ===================== */
+
+.device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.device-list-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f8f9fa;
+  border: 1px solid #e8eaed;
+  transition: border-color .2s, background .2s;
+}
+
+.device-list-item:hover {
+  border-color: #1a73e8;
+  background: #f1f6ff;
+}
+
+.dev-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dev-dot.online  { background: #34a853; animation: pulse-dot 1.8s infinite; }
+.dev-dot.offline { background: #9aa0a6; }
+
+.dev-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dev-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #202124;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dev-sub {
+  font-size: 11.5px;
+  color: #5f6368;
+}
+
+.dev-dist {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1a73e8;
+  white-space: nowrap;
+}
+
+.empty-hint {
+  text-align: center;
+  color: #9aa0a6;
+  font-size: 12.5px;
+  padding: 14px;
 }
 
 /* ===================== DEVICE CARD ===================== */
@@ -73,15 +257,15 @@ html, body {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 16px;
+  padding: 14px;
   border-radius: 12px;
   background: #f8f9fa;
   border: 1px solid #e8eaed;
 }
 
 .device-avatar {
-  width: 48px;
-  height: 48px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
   background: #e3f2fd;
   display: flex;
@@ -91,20 +275,20 @@ html, body {
 }
 
 .device-avatar svg {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   color: #1a73e8;
 }
 
 .device-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
 }
 
 .device-name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: #202124;
   white-space: nowrap;
@@ -121,12 +305,16 @@ html, body {
   color: #34a853;
 }
 
+.device-status.offline {
+  color: #9aa0a6;
+}
+
 /* ===================== STATS GRID ===================== */
 
 .stats-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 10px;
 }
 
 .stat-item {
@@ -140,11 +328,11 @@ html, body {
 }
 
 .stat-label {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 10.5px;
+  font-weight: 600;
   color: #5f6368;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
 }
 
 .stat-value {
@@ -154,23 +342,11 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
-.stat-value.battery {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.battery-icon {
-  color: #34a853;
-  font-size: 16px;
-}
-
 /* ===================== BUTTONS ===================== */
 
 .actions {
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
 .btn {
@@ -183,6 +359,7 @@ html, body {
   border-radius: 10px;
   font-size: 14px;
   font-weight: 600;
+  font-family: inherit;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -194,11 +371,12 @@ html, body {
 .btn-primary {
   background: #1a73e8;
   color: #ffffff;
+  box-shadow: 0 2px 8px rgba(26, 115, 232, 0.28);
 }
 
 .btn-primary:hover {
   background: #1565c0;
-  box-shadow: 0 4px 12px rgba(26, 115, 232, 0.35);
+  box-shadow: 0 4px 14px rgba(26, 115, 232, 0.40);
 }
 
 .btn-primary:disabled {
@@ -214,6 +392,10 @@ html, body {
 }
 
 /* Loading spinner */
+.btn.loading {
+  position: relative;
+}
+
 .btn.loading .btn-icon,
 .btn.loading span {
   opacity: 0;
@@ -230,10 +412,6 @@ html, body {
   position: absolute;
 }
 
-.btn.loading {
-  position: relative;
-}
-
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -241,11 +419,12 @@ html, body {
 /* ===================== FOOTER ===================== */
 
 .sidebar-footer {
-  padding: 14px 24px;
+  padding: 13px 20px;
   border-top: 1px solid #e8eaed;
   font-size: 11px;
   color: #9aa0a6;
   text-align: center;
+  flex-shrink: 0;
 }
 
 /* ===================== MAP ===================== */
@@ -256,24 +435,96 @@ html, body {
   z-index: 1;
 }
 
+/* ===================== CUSTOM MARKERS ===================== */
+
+/* Marker thiết bị (pin + sóng radar) */
+.device-pin {
+  position: relative;
+  width: 24px;
+  height: 24px;
+}
+
+.pulse-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(26, 115, 232, 0.35);
+  animation: marker-pulse 1.8s ease-out infinite;
+}
+
+.pin-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 13px;
+  height: 13px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #1a73e8;
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.4);
+}
+
+.pin-dot.python {
+  background: #7b1fa2;
+}
+
+@keyframes marker-pulse {
+  0%   { transform: scale(0.4); opacity: 0.9; }
+  70%  { transform: scale(1.8); opacity: 0; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+/* Marker "bạn" - vòng xanh mặc định của dot */
+.my-pulse {
+  animation: marker-pulse 1.5s ease-out infinite;
+}
+
+.leaflet-div-icon {
+  background: transparent;
+  border: none;
+}
+
 /* ===================== LEAFLET OVERRIDES ===================== */
 
 .leaflet-control-layers {
   border-radius: 10px !important;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.12) !important;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.14) !important;
   font-family: inherit !important;
+}
+
+.leaflet-control-layers-toggle {
+  width: 38px;
+  height: 38px;
 }
 
 .leaflet-popup-content-wrapper {
-  border-radius: 10px !important;
+  border-radius: 12px !important;
   font-family: inherit !important;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.18) !important;
 }
 
 .leaflet-popup-content {
-  margin: 12px 16px !important;
+  margin: 14px 18px !important;
   font-size: 13px !important;
-  line-height: 1.5 !important;
+  line-height: 1.6 !important;
+}
+
+.pop-title {
+  font-weight: 700;
+  margin-bottom: 4px;
+  color: #202124;
+}
+
+.pop-row {
+  color: #5f6368;
+  font-size: 12px;
+}
+
+.pop-dist {
+  color: #1a73e8;
+  font-weight: 600;
+  margin-top: 4px;
 }
 
 /* ===================== RESPONSIVE ===================== */

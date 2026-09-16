@@ -58,6 +58,14 @@ public class LocationService extends Service {
 
     private static final String TAG = "LocationService";
 
+    // Trạng thái chạy của service - MainActivity đọc để hiển thị UI realtime
+    private static volatile boolean sRunning = false;
+
+    /** @return true nếu service đang chạy (MainActivity dùng để hiển thị trạng thái). */
+    public static boolean isRunning() {
+        return sRunning;
+    }
+
     // ---- Cấu hình Firebase (Đồng bộ với firebaseConfig.txt) ----
     private static final String FIREBASE_API_KEY = "AIzaSyD_mMdWjE7xcI4fqAX03iP5p4joq1af838";
     private static final String FIREBASE_DATABASE_URL = "https://locationrealtimeapps-default-rtdb.firebaseio.com";
@@ -125,6 +133,7 @@ public class LocationService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.d(TAG, "onStartCommand - bắt đầu foreground + lấy vị trí");
+        sRunning = true;
         startForeground(NOTIFICATION_ID, buildNotification());
         startLocationUpdates();
         return START_STICKY;
@@ -133,6 +142,7 @@ public class LocationService extends Service {
     @Override
     public void onDestroy() {
         Log.d(TAG, "onDestroy - dọn dẹp tài nguyên");
+        sRunning = false;
 
         // Dừng location
         if (fusedLocationClient != null && locationCallback != null) {
