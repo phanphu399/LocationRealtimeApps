@@ -66,15 +66,9 @@ public class LocationService extends Service {
         return sRunning;
     }
 
-    // ---- Cấu hình Firebase (Đồng bộ với firebaseConfig.txt) ----
-    private static final String FIREBASE_API_KEY = "AIzaSyD_mMdWjE7xcI4fqAX03iP5p4joq1af838";
-    private static final String FIREBASE_DATABASE_URL = "https://locationrealtimeapps-default-rtdb.firebaseio.com";
-    private static final String FIREBASE_PROJECT_ID = "locationrealtimeapps";
-    private static final String FIREBASE_APP_ID = "1:549557847899:web:18339736baa351804c3c7e";
-
     // ---- Đường dẫn Firebase (ĐỒNG BỘ 100% với web-dashboard/app.js) ----
-    private static final String DEVICE_PATH   = "devices/device_android_01";
-    private static final String COMMAND_PATH  = "devices/device_android_01/command";
+    private static final String DEVICE_PATH  = FirebaseConfig.DEVICE_PATH;
+    private static final String COMMAND_PATH = FirebaseConfig.COMMAND_PATH;
 
     // ---- Cấu hình location ----
     private static final long UPDATE_INTERVAL_MS = 5000L;
@@ -174,14 +168,14 @@ public class LocationService extends Service {
         if (!FirebaseApp.getApps(this).isEmpty()) return;
 
         FirebaseOptions options = new FirebaseOptions.Builder()
-                .setApplicationId(FIREBASE_APP_ID)
-                .setApiKey(FIREBASE_API_KEY)
-                .setDatabaseUrl(FIREBASE_DATABASE_URL)
-                .setProjectId(FIREBASE_PROJECT_ID)
+                .setApplicationId(FirebaseConfig.APP_ID)
+                .setApiKey(FirebaseConfig.API_KEY)
+                .setDatabaseUrl(FirebaseConfig.DATABASE_URL)
+                .setProjectId(FirebaseConfig.PROJECT_ID)
                 .build();
 
         FirebaseApp.initializeApp(this, options);
-        Log.d(TAG, "Firebase đã khởi tạo với databaseURL: " + FIREBASE_DATABASE_URL);
+        Log.d(TAG, "Firebase đã khởi tạo với databaseURL: " + FirebaseConfig.DATABASE_URL);
     }
 
     /**

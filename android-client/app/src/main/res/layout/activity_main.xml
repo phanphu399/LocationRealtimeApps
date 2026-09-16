@@ -45,7 +45,7 @@
             android:orientation="vertical"
             android:padding="16dp">
 
-            <!-- ---- Card: Kết nối Firebase ---- -->
+            <!-- Card: Ket noi Firebase -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -97,7 +97,7 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- ---- Card: Vị trí hiện tại ---- -->
+            <!-- Card: Vi tri hien tai -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -226,7 +226,7 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- ---- Card: Pin ---- -->
+            <!-- Card: Pin -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -271,7 +271,7 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- ---- Card: Điều khiển ---- -->
+            <!-- Card: Dieu khien -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

@@ -55,12 +55,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQUEST_LOCATION_PERMISSION = 1001;
     private static final int REQUEST_NOTIFICATION_PERMISSION = 1002;
 
-    // Firebase config - đồng bộ firebaseConfig.txt
-    private static final String FIREBASE_API_KEY = "AIzaSyD_mMdWjE7xcI4fqAX03iP5p4joq1af838";
-    private static final String FIREBASE_DATABASE_URL = "https://locationrealtimeapps-default-rtdb.firebaseio.com";
-    private static final String FIREBASE_PROJECT_ID = "locationrealtimeapps";
-    private static final String FIREBASE_APP_ID = "1:549557847899:web:18339736baa351804c3c7e";
-    private static final String DEVICE_PATH = "devices/device_android_01";
+    private static final String DEVICE_PATH = FirebaseConfig.DEVICE_PATH;
 
     // Nhóm quyền vị trí (background location chỉ tồn tại từ API 29)
     private static final String[] REQUIRED_PERMISSIONS;
@@ -124,7 +119,6 @@ public class MainActivity extends AppCompatActivity {
         refreshServiceStatus();
         refreshConnectionStatus();
         registerBatteryReceiver();
-        setupListeners();
         setupFirebaseListeners();
 
         // Xin quyền notification (Android 13+) cho FGS
@@ -135,7 +129,6 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         refreshServiceStatus();
-        maybeRequestLocationPermissionSilently();
     }
 
     @Override
@@ -184,10 +177,10 @@ public class MainActivity extends AppCompatActivity {
     private void ensureFirebaseInitialized() {
         if (!FirebaseApp.getApps(this).isEmpty()) return;
         FirebaseOptions options = new FirebaseOptions.Builder()
-                .setApplicationId(FIREBASE_APP_ID)
-                .setApiKey(FIREBASE_API_KEY)
-                .setDatabaseUrl(FIREBASE_DATABASE_URL)
-                .setProjectId(FIREBASE_PROJECT_ID)
+                .setApplicationId(FirebaseConfig.APP_ID)
+                .setApiKey(FirebaseConfig.API_KEY)
+                .setDatabaseUrl(FirebaseConfig.DATABASE_URL)
+                .setProjectId(FirebaseConfig.PROJECT_ID)
                 .build();
         FirebaseApp.initializeApp(this, options);
     }
@@ -195,10 +188,6 @@ public class MainActivity extends AppCompatActivity {
     private void registerBatteryReceiver() {
         IntentFilter filter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
         registerReceiver(batteryReceiver, filter);
-    }
-
-    private void setupListeners() {
-        // Không cần thêm gì - các nút đã gán listener ở bindViews()
     }
 
     /* ===================================================================== */
@@ -303,13 +292,7 @@ public class MainActivity extends AppCompatActivity {
         return true;
     }
 
-    /** Tự xin quyền location nếu cần mỗi khi quay lại app. */
-    private void maybeRequestLocationPermissionSilently() {
-        if (!hasAllPermissions() && getIntent() != null && shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)) {
-            // Chỉ xin nếu hệ thống cho phép hiện rationale -> không spam
-        }
-    }
-
+    /** Xin quyền notification (Android 13+) cho FGS. */
     private void maybeRequestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= 33
                 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
@@ -360,13 +343,5 @@ public class MainActivity extends AppCompatActivity {
         Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
         intent.setData(Uri.parse("package:" + getPackageName()));
         startActivity(intent);
-    }
-
-    /* ===================================================================== */
-    /* UI HELPERS                                                            */
-    /* ===================================================================== */
-
-    private void refreshAll() {
-        refreshServiceStatus();
     }
 }
