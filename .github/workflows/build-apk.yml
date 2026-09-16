@@ -23,9 +23,21 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # 3. Cấu hình Android SDK (cmdline-tools, đảm bảo có SDK platform để build)
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v2
+      # 3. Android SDK đã được cài SẴN trên ubuntu-latest (ANDROID_HOME có sẵn).
+      #    Chỉ đảm bảo đủ platform-34 + build-tools-34 cho AGP 8.4 + compileSdk 34.
+      #    (KHÔNG dùng android-actions/setup-android@v2 vì action này bị lỗi
+      #     "Failed to find package 'tools'" - package đã bị Google gỡ bỏ)
+      - name: Verify / install Android SDK packages
+        run: |
+          ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          SDK_MANAGER="$(ls "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1)"
+          echo "sdkmanager=$SDK_MANAGER"
+          if [ -n "$SDK_MANAGER" ]; then
+            yes | "$SDK_MANAGER" --licenses >/dev/null 2>&1 || true
+            "$SDK_MANAGER" "platforms;android-34" "build-tools;34.0.0" >/dev/null 2>&1 || true
+          fi
+          echo "Android SDK ready (AGP sẽ tự tải phần còn thiếu nếu cần)"
 
       # 4. Cấp quyền thực thi cho gradlew
       - name: Grant execute permission for gradlew
