@@ -1,108 +1,165 @@
-# GPS Realtime Tracker
+# 📍 GPS Realtime Tracker
 
-A real-time GPS tracking system with a web dashboard and background tracker tool powered by Firebase Realtime Database.
+Hệ thống theo dõi vị trí GPS theo thời gian thực (real-time): thiết bị **Android** gửi tọa độ GPS lên **Firebase Realtime Database**, **Web Dashboard** (PWA + Leaflet) hiển thị marker, lộ trình, pin, tốc độ và cho phép ra lệnh điều khiển từ xa.
 
-## Architecture
+---
+
+## 🏗️ Kiến trúc tổng thể
+
+```
+┌──────────────────────┐        ┌─────────────────────────────┐
+│   ANDROID CLIENT     │        │     WEB DASHBOARD (PWA)     │
+│  (FusedLocation)     │        │   https://your-app.vercel.app │
+│                      │  PUT   │    index.html + app.js      │
+│  LocationService ────────────▶  Firebase JS SDK (onValue)   │
+│   GPS mỗi 5 giây     │        │        │                    │
+│   lat, lng, speed,   │        │   Leaflet 1.9 map, marker,  │
+│   battery, charging  │        │   polyline lộ trình         │
+│   timestamp          │        │   Nominatim reverse geocode │
+│                      │        │   Service Worker (offline)  │
+│   ┌── command ───────┼────────│   PLAY_SOUND / VOLUME_UP    │
+└──────────┬───────────┘        └──────┬──────────────────────┘
+           │                          │
+           └──────────▶  FIREBASE ◀───┘
+              Realtime Database  (real-time sync, tự thay đổi push)
+                          ▲
+                          │
+                   track_coords (optional)
+```
+
+### Luồng dữ liệu
+
+1. **Android** (`LocationService` - Foreground Service) lấy GPS qua `FusedLocationProviderClient` mỗi 5 giây → ghi `updateChildren` lên **Firebase RTDB**:
+   ```
+   /devices/<DEVICE_PATH>   { lat, lng, timestamp, battery, charging, speed }
+   ```
+2. **Web Dashboard** đăng ký `onValue(ref(db, "devices"))` → nhận **mọi thay đổi theo thời gian thực**, không cần WebSocket/polling (Firebase tự push qua WebSocket).
+3. Dashboard render marker trên **Leaflet**, vẽ **polyline lịch sử** (tối đa 250 điểm/thiết bị), hiển thị **telemetry** (pin, sạc, tốc độ km/h) và **trạng thái online/offline** (TTL 60 giây).
+4. Người dùng bấm nút → dashboard ghi `command: "PLAY_SOUND"` / `"VOLUME_UP"` vào `/devices/<id>/command` → Android lắng nghe và thực thi, sau đó reset về `"NONE"`.
+
+### Định danh thiết bị
+
+- **Android:** `DEVICE_ID = Build.MODEL` (ví dụ `Pixel 6`), làm sạch ký tự, fallback `device`. Đường dẫn: `/devices/Pixel 6`.
+- **Mô phỏng:** thiết bị có tên chứa `python` hoặc bắt đầu bằng `sim` được xem là mô phỏng và ẩn theo mặc định (bật toggle **Sim** để hiện).
+
+---
+
+## 🧩 Công nghệ & Giao thức
+
+| Thành phần | Công nghệ | Vai trò |
+|---|---|---|
+| Map | **Leaflet 1.9** + nhiều lớp tile (CARTO Positron sáng, Voyager, OSM, vệ tinh Esri) | Hiển thị bản đồ, marker, polyline |
+| Realtime DB | **Firebase Realtime Database** (WebSocket push) | Đồng bộ vị trí real-time 2 chiều |
+| Reverse geocode | **Nominatim OSM API** (cache + debounce 10s) | Địa chỉ tiếng Việt cho marker |
+| Geolocation (web) | **Browser Geolocation API** (`watchPosition`, high accuracy) | Hiển thị "bạn đang ở đâu" |
+| Geolocation (Android) | **FusedLocationProviderClient** (`PRIORITY_HIGH_ACCURACY`, 5s) | Tọa độ GPS điện thoại |
+| Android Background | **Foreground Service** (START_STICKY) + battery-optimization whitelist | Chạy ngầm, không bị kill |
+| Web App | **PWA** (manifest + Service Worker, cache-first offline) | Cài đặt lên màn hình chính Android/iOS |
+| Command | Firebase node `command` (`PLAY_SOUND`, `VOLUME_UP`) | Điều khiển điện thoại từ web |
+
+---
+
+## 📁 Cấu trúc thư mục
 
 ```
 location_app_realtime/
-├── web-dashboard/          # Frontend - LeafletJS map dashboard
-│   ├── index.html
-│   ├── style.css
-│   └── app.js
-├── background-tracker/     # Backend - Python GPS simulator
-│   ├── tracker.py
-│   └── requirements.txt
-├── android-client/         # Android (Java) - real device GPS tracker
-│   ├── AndroidManifest.xml   # Permissions + LocationService declaration
-│   ├── build.gradle          # Firebase / Play Services dependencies
-│   ├── LocationService.java  # Foreground Service (GPS 5s → Firebase)
-│   └── MainActivity.java     # Runtime permission + start service
-├── start.py                # One-click launcher (dashboard + tracker)
-├── firebaseConfig.txt      # Firebase configuration reference
-└── README.md
+├── web-dashboard/                 # Frontend PWA
+│   ├── index.html                 # Giao diện (sidebar / bottom-sheet mobile)
+│   ├── style.css                  # Theme sáng hiện đại, responsive
+│   ├── app.js                     # Firebase SDK + Leaflet + logic realtime
+│   ├── sw.js                      # Service Worker (offline cache, cache v4)
+│   ├── manifest.json              # PWA (standalone, icons 192/512 maskable)
+│   └── icons/                     # icon-180/192/512.png, favicon.png
+├── android-client/                # Android (Java)
+│   └── app/src/main/
+│       ├── java/com/example/locationtracker/
+│       │   ├── MainActivity.java      # Quyền + battery whitelist + start service
+│       │   ├── LocationService.java   # Foreground service: GPS 5s → Firebase
+│       │   └── FirebaseConfig.java    # DEVICE_ID từ Build.MODEL, paths
+│       ├── res/layout/activity_main.xml
+│       ├── res/values/colors.xml
+│       └── AndroidManifest.xml
+├── background-tracker/tracker.py  # (Optional) tool giả lập GPS Python — tắt mặc định
+├── start.py                       # Khởi động dashboard local (không tự chạy tracker)
+└── .github/workflows/build-apk.yml# CI build APK mỗi lần push
 ```
 
-## Tech Stack
+---
 
-| Component        | Technology                                  |
-| ---------------- | ------------------------------------------- |
-| Map              | [LeafletJS](https://leafletjs.com) + OSM   |
-| Realtime DB      | Firebase Realtime Database                  |
-| Tracker (sim)    | Python 3 + `requests`                       |
-| Tracker (Android)| Java, Foreground Service + FusedLocation   |
-| Web Server       | Python `http.server`                        |
+## 🚀 Quick Start
 
-## Android Client (thay thế tool giả lập Python)
+### 1. Web Dashboard (PWA)
 
-`android-client/` là mã nguồn Android (Java) để thay thế tool giả lập Python: thay vì tọa độ giả, **LocationService** sẽ lấy tọa độ GPS thật từ thiết bị và đẩy lên Firebase Realtime DB.
-
-- **Đường dẫn đẩy dữ liệu:** `/devices/device_android_01` (cùng cấu trúc `{lat, lng, timestamp}` với tracker Python → web dashboard render được ngay).
-- **Cấu hình Firebase** đọc từ `firebaseConfig.txt` (`databaseURL: https://locationrealtimeapps-default-rtdb.firebaseio.com`).
-- **Permission flow:** `MainActivity` xin `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`, `ACCESS_BACKGROUND_LOCATION` rồi gọi `startForegroundService()` → `LocationService` chạy ngầm, cập nhật vị trí mỗi 5 giây bằng `FusedLocationProviderClient`.
-
-### Copy vào Android Studio
-
-1. Tạo project mới với package `com.example.locationtracker`.
-2. Copy `AndroidManifest.xml`, `LocationService.java`, `MainActivity.java` vào `app/src/main/java/com/example/locationtracker/`.
-3. Copy dependencies từ `build.gradle` vào `app/build.gradle`.
-4. Chạy trên thiết bị thật (FusedLocation cần GPS/Play Services).
-5. Bật quyền "Allow all the time" cho app trên Android 11+ để lấy tọa độ khi chạy ngầm.
-
-> Lưu ý: có thể bỏ quyền `ACCESS_BACKGROUND_LOCATION` nếu chỉ cần chạy khi app đang mở.
-
-## Quick Start
-
-### Prerequisites
-
-- Python 3.7+
-- Internet connection (for Firebase + OSM tiles)
-
-### Install dependencies
-
-```bash
-pip install -r background-tracker/requirements.txt
-```
-
-### Run everything
-
-```bash
-python start.py
-```
-
-This will:
-1. Start the GPS tracker (`tracker.py`) sending coordinates to Firebase every 3 seconds.
-2. Launch the web dashboard on **http://localhost:8080**.
-3. Auto-open your default browser.
-
-### Run manually
-
-**Web Dashboard only:**
+Chạy local:
 ```bash
 cd web-dashboard
-python -m http.server 8080
+python -m http.server 8080        # hoặc bất kỳ static server nào
+# mở http://localhost:8080
 ```
 
-**Tracker only:**
+Hoặc deploy lên **Vercel / Netlify / GitHub Pages** — folder `web-dashboard` là static site thuần.
+
+### 2. Android Client
+
+Build bằng **GitHub Actions** (đã có workflow, push lên `main` là tự build APK trong tab *Actions*) hoặc mở `android-client/` bằng Android Studio → `Run`.
+
+Trên điện thoại:
+1. Cài APK, cấp quyền: **Location** (Allow all the time) + mở app.
+2. Đồng ý **"Quyền hoạt động ngầm"** (bỏ battery-optimization) → app chạy nền không bị dừng.
+3. Mở dashboard → thiết bị `Pixel 6` xuất hiện tự động, cập nhật mỗi 5 giây.
+
+### 3. (Tùy chọn) Mô phỏng GPS bằng Python
+
 ```bash
 python background-tracker/tracker.py
 ```
+Tạo thiết bị ảo `device_python_01` đi ngẫu nhiên — thành phần này **mặc định tắt** khi chạy `start.py` để không làm nhiễu bản đồ thật.
 
-## How It Works
+> 💡 Không có điện thoại? Bấm nút **"Mô phỏng di chuyển"** ngay trên dashboard (web) để tạo thiết bị ảo `sim_demo_01`.
 
-1. **Tracker** writes device coordinates (`lat`, `lng`, `timestamp`) to Firebase path `/devices/device_python_01.json` via REST API every 3 seconds.
-2. **Dashboard** listens to `/devices` on Firebase Realtime Database via the Firebase JS SDK.
-3. When data changes, markers are created or updated on the LeafletJS map in real time.
+---
 
-## Configuration
+## 🗄️ Data Schema (Firebase RTDB)
 
-Edit `firebaseConfig.txt` or update the config object in `web-dashboard/app.js` and `background-tracker/tracker.py` to use your own Firebase project.
+```
+/devices/
+├── <DEVICE_ID>/
+│   ├── lat        : number   # latitude (6 chữ số thập phân)
+│   ├── lng        : number   # longitude
+│   ├── timestamp  : number   # epoch seconds
+│   ├── battery    : number   # % pin (0-100)
+│   ├── charging   : boolean  # đang sạc?
+│   ├── speed      : number   # km/h (Android: từ Location.getSpeed())
+│   └── command    : string   # "NONE" | "PLAY_SOUND" | "VOLUME_UP"
+```
 
-| Key              | Description                    |
-| ---------------- | ------------------------------ |
-| `databaseURL`    | Firebase Realtime DB endpoint  |
-| `apiKey`         | Firebase Web API key           |
-| `projectId`      | Firebase project ID            |
+> Web đánh dấu thiết bị **offline** nếu `timestamp` cũ hơn **60 giây**.
+
+---
+
+## ⚙️ Cấu hình
+
+| Nơi | Config |
+|---|---|
+| `web-dashboard/app.js` | `firebaseConfig` (apiKey, databaseURL, projectId, appId) |
+| `android-client/.../FirebaseConfig.java` | `API_KEY`, `DATABASE_URL`, `PROJECT_ID`, `APP_ID` |
+| Tham số web | `MIN_STEP_M` (15 m dead-zone chống nhiễu GPS), `MAX_JUMP_M` (500 m guard), `DEVICE_TTL_MS` (60 s), `MAX_HISTORY` (250 điểm lộ trình) |
+| Android | `UPDATE_INTERVAL_MS` (5 s), `ALARM_DURATION_MS` (10 s) |
+
+---
+
+## 🎯 Tính năng
+
+- ✅ Map realtime nhiều lớp nền (CARTO sáng mặc định, Voyager, OSM, vệ tinh)
+- ✅ Chống nhiễu/jitter GPS: dead-zone 15 m, teleport guard, làm mượt marker, vòng tròn sai số giới hạn 300 m → hết hiện tượng "sao băng"
+- ✅ Lộ trình dạng polyline + mũi tên hướng di chuyển trên marker
+- ✅ Telemetry: pin %, icon ⚡ khi sạc, tốc độ km/h, timestamp
+- ✅ Trạng thái online/offline tự động (TTL 60 s)
+- ✅ Bám theo ("follow") vị trí của bạn hoặc theo từng thiết bị
+- ✅ Điều khiển từ xa: phát âm thanh, tăng âm lượng (PLAY_SOUND / VOLUME_UP)
+- ✅ Xóa thiết bị khỏi map, toggle hiện/ẩn thiết bị mô phỏng, chế độ mô phỏng ngay trên web
+- ✅ PWA: cài lên màn hình chính Android/iOS, offline cache
+- ✅ Android: Foreground Service START_STICKY + battery whitelist
 
 ## License
 

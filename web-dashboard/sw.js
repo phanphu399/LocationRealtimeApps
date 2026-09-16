@@ -1,4 +1,4 @@
-const CACHE = 'gps-tracker-v3';
+const CACHE = 'gps-tracker-v4';
 const SHELL = ['./', './index.html', './style.css', './app.js', './manifest.json', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -15,7 +15,7 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   const url = e.request.url;
-  if (url.includes('nominatim') || url.includes('tile.openstreetmap') || url.includes('arcgisonline') || url.includes('firebaseio') || url.includes('gstatic')) {
+  if (url.includes('nominatim') || url.includes('tile.openstreetmap') || url.includes('basemaps.cartocdn') || url.includes('arcgisonline') || url.includes('firebaseio') || url.includes('gstatic')) {
     e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
   } else {
     e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));

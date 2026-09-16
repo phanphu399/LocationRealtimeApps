@@ -109,9 +109,13 @@ public class LocationService extends Service {
             if (level >= 0 && scale > 0) {
                 batteryPercent = (int) Math.round(level * 100.0 / scale);
             }
+            int status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN);
+            batteryCharging = status == BatteryManager.BATTERY_STATUS_CHARGING
+                    || status == BatteryManager.BATTERY_STATUS_FULL;
         }
     };
     private int batteryPercent = -1;
+    private boolean batteryCharging = false;
 
     /* ===================================================================== */
     /* LIFECYCLE                                                             */
@@ -216,6 +220,10 @@ public class LocationService extends Service {
         updates.put("timestamp", System.currentTimeMillis() / 1000L);
         if (batteryPercent >= 0) {
             updates.put("battery", batteryPercent);
+            updates.put("charging", batteryCharging);
+        }
+        if (location.hasSpeed()) {
+            updates.put("speed", Math.round(location.getSpeed() * 3.6 * 10.0) / 10.0); // m/s -> km/h
         }
 
         deviceRef.updateChildren(updates)
