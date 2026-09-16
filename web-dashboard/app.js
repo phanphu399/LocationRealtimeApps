@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+import { getDatabase, ref, onValue, set, remove } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
 
 /* ============================================================ */
 /*  FIREBASE CONFIG                                              */
@@ -49,7 +49,6 @@ L.control.layers(
 /* ============================================================ */
 
 const DEVICE_TTL_MS = 60_000;
-const TARGET_DEVICE = "device_android_01";
 const GEOCODE_COOLDOWN_MS = 10_000;
 
 // ---- GPS drift / jitter filtering ----
@@ -72,6 +71,11 @@ const addressCache = new Map();
 const geocodeTimestamps = {};
 let lastFitTime = 0;
 let showSimulated = false;
+
+// ---- Theo dõi / follow ----
+let followTarget = null;   // 'me' | deviceId | null — map tự pan theo mục tiêu này
+let targetDeviceId = null; // thiết bị đang được chọn để xem/điều khiển
+let followOpacity = 1;
 
 /* ============================================================ */
 /*  DOM REFS                                                     */
@@ -100,6 +104,9 @@ const btnToggle       = $("btnToggle");
 const overlay         = $("overlay");
 const sidebar         = $("sidebar");
 const cbSimDevices    = $("cbSimDevices");
+const btnFollowMe     = $("btnFollowMe");
+const followBadge     = $("followBadge");
+const followMeLabel   = $("followMeLabel");
 
 /* ============================================================ */
 /*  REVERSE GEOCODING (Nominatim)                                */
@@ -250,6 +257,11 @@ function onGeoSuccess(position) {
     }
   }
 
+  // Tự pan map theo vị trí của tôi nếu đang bám theo
+  if (followTarget === "me") {
+    panToTarget(myPos, Math.max(map.getZoom(), 15));
+  }
+
   updateDistances();
   updateDetailCardAddress();
 }
@@ -257,6 +269,58 @@ function onGeoSuccess(position) {
 function onGeoError(err) {
   myAccuracy.textContent = `Không lấy được vị trí: ${err.message || "đã từ chối quyền"}`;
 }
+
+/* ============================================================ */
+/*  FOLLOW / BÁM THEO Logic                                      */
+/* ============================================================ */
+
+function updateFollowUI() {
+  const followMe = btnFollowMe;
+  if (followTarget === "me") {
+    followMe.classList.add("active");
+    followMeLabel.textContent = "Đang bám theo tôi";
+  } else {
+    followMe.classList.remove("active");
+    followMeLabel.textContent = "Bám theo vị trí của tôi";
+  }
+
+  if (followTarget) {
+    followBadge.style.display = "flex";
+    followBadgeText.textContent = followTarget === "me"
+      ? "Đang bám theo vị trí của bạn"
+      : `Đang bám theo: ${followTarget}`;
+  } else {
+    followBadge.style.display = "none";
+  }
+}
+
+function panToTarget(latlng, zoom) {
+  map.panTo(latlng, { animate: true, duration: 0.5 });
+  if (zoom) map.setZoom(zoom, { animate: true });
+}
+
+function setFollowMe() {
+  followTarget = followTarget === "me" ? null : "me";
+  updateFollowUI();
+  if (followTarget === "me" && myPos) {
+    panToTarget(myPos, Math.max(map.getZoom(), 15));
+  }
+}
+
+function setFollowDevice(deviceId) {
+  followTarget = followTarget === deviceId ? null : deviceId;
+  updateFollowUI();
+  const d = deviceData[deviceId];
+  if (followTarget === deviceId && d) {
+    panToTarget([d.lat, d.lng], Math.max(map.getZoom(), 15));
+  }
+}
+
+btnFollowMe.addEventListener("click", setFollowMe);
+$("btnUnfollow").addEventListener("click", () => {
+  followTarget = null;
+  updateFollowUI();
+});
 
 function initGeolocation() {
   if (!("geolocation" in navigator)) {
@@ -277,17 +341,27 @@ function initGeolocation() {
 const deviceRef = ref(db, "devices");
 
 onValue(deviceRef, (snapshot) => {
-  const data = snapshot.val();
-  if (!data) {
-    renderDeviceList();
-    return;
-  }
+  const data = snapshot.val() || {};
 
   // Loại bỏ dữ liệu của thiết bị mô phỏng (device_python_*) nếu chưa bật toggle
   const visibleData = {};
   for (const [deviceId, device] of Object.entries(data)) {
-    if (!showSimulated && deviceId.includes("python")) continue;
+    if (!showSimulated && isSimulatedDevice(deviceId)) continue;
     visibleData[deviceId] = device;
+  }
+
+  // Xử lý thiết bị ĐÃ BỊ XÓA khỏi Firebase (offline / bị remove) -> dọn marker + dữ liệu
+  const incomingIds = new Set(Object.keys(visibleData));
+  for (const deviceId of Object.keys(deviceData)) {
+    if (!incomingIds.has(deviceId)) {
+      if (deviceMarkers[deviceId]) {
+        map.removeLayer(deviceMarkers[deviceId]);
+        delete deviceMarkers[deviceId];
+        delete renderedDevicePos[deviceId];
+        delete newDeviceFitted[deviceId];
+      }
+      delete deviceData[deviceId];
+    }
   }
 
   for (const [deviceId, device] of Object.entries(visibleData)) {
@@ -305,10 +379,22 @@ onValue(deviceRef, (snapshot) => {
 
     upsertDeviceMarker(deviceId);
 
+    // Tự chọn thiết bị theo dõi chính khi chưa chọn (bỏ qua thiết bị mô phỏng)
+    const idIsSim = isSimulatedDevice(deviceId);
+    if (!targetDeviceId && !idIsSim) {
+      targetDeviceId = deviceId;
+    }
+
     if (!existed && !newDeviceFitted[deviceId]) {
       newDeviceFitted[deviceId] = true;
       autoFitNewDevice(deviceId);
     }
+  }
+
+  // Yêu cầu targetDeviceId trỏ về thiết bị thật nếu bị xóa
+  if (targetDeviceId && (deviceData[targetDeviceId] == null || isSimulatedDevice(targetDeviceId))) {
+    const realIds = Object.keys(deviceData).filter(id => !isSimulatedDevice(id));
+    targetDeviceId = realIds.length ? realIds[0] : null;
   }
 
   // Xóa marker của thiết bị mô phỏng khỏi bản đồ khi ẩn
@@ -316,10 +402,33 @@ onValue(deviceRef, (snapshot) => {
     removeSimulatedMarkers();
   }
 
+  // Tự pan map nếu đang bám theo 1 thiết bị
+  if (followTarget && followTarget !== "me") {
+    const d = deviceData[followTarget];
+    if (d) {
+      panToTarget([d.lat, d.lng], Math.max(map.getZoom(), 15));
+    }
+  }
+
   renderDeviceList();
   updateDetailCard();
   updateDistances();
 });
+
+function deleteDevice(deviceId) {
+  const d = deviceData[deviceId];
+  if (!d) return;
+  if (!confirm(`Xóa thiết bị ${deviceId}? Thiết bị chỉ xuất hiện lại khi nó tự đẩy dữ liệu trở lại.`)) return;
+  remove(ref(db, `devices/${deviceId}`))
+    .then(() => {
+      if (followTarget === deviceId) {
+        followTarget = null;
+        updateFollowUI();
+      }
+      if (targetDeviceId === deviceId) targetDeviceId = null;
+    })
+    .catch(err => alert("Xóa thất bại: " + err.message));
+}
 
 function isSimulatedDevice(deviceId) {
   return deviceId.toLowerCase().includes("python");
@@ -386,6 +495,14 @@ function upsertDeviceMarker(deviceId) {
   deviceMarkers[deviceId] = marker;
   renderedDevicePos[deviceId] = latLng;
 
+  // Click vào marker -> bám theo thiết bị đó
+  marker.on("click", () => {
+    targetDeviceId = deviceId;
+    setFollowDevice(deviceId);
+    renderDeviceList();
+    updateDetailCard();
+  });
+
   buildPopup(deviceId).then(html => {
     marker.bindPopup(html);
   });
@@ -419,15 +536,46 @@ function renderDeviceList() {
     const battery = d.battery;
 
     const item = document.createElement("div");
-    item.className = "device-list-item";
+    item.className = "device-list-item" + (deviceId === targetDeviceId ? " active" : "");
     item.innerHTML = `
       <span class="dev-dot ${fresh ? "online" : "offline"}"></span>
       <div class="dev-info">
-        <div class="dev-name">${deviceId}</div>
-        <div class="dev-sub">${fresh ? timeAgoVietnamese(ageSec) : `Mất tín hiệu · ${ageSec}s trước`}</div>
+        <div class="dev-name">${deviceId}${d.command && d.command !== "NONE" ? ' <span class="cmd-badge">' + d.command + "</span>" : ""}</div>
+        <div class="dev-sub">${fresh ? timeAgoVietnamese(ageSec) : `Mất tín hiệu · ${ageSec}s trước`} · ${dist}</div>
       </div>
       ${battery != null ? `<div class="dev-battery ${batteryClass(battery)}">${battery}%</div>` : ''}
-      <div class="dev-dist">${dist}</div>`;
+      <div class="dev-actions">
+        <button class="dev-follow ${followTarget === deviceId ? "active" : ""}" title="Bám theo thiết bị" data-follow="${deviceId}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M12 2v6M12 16v6M2 12h6M16 12h6"/>
+          </svg>
+        </button>
+        <button class="dev-delete" title="Xóa thiết bị" data-del="${deviceId}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>
+          </svg>
+        </button>
+      </div>`;
+
+    item.addEventListener("click", (ev) => {
+      if (ev.target.closest(".dev-follow")) {
+        targetDeviceId = deviceId;
+        setFollowDevice(deviceId);
+        renderDeviceList();
+        updateDetailCard();
+        return;
+      }
+      if (ev.target.closest(".dev-delete")) {
+        deleteDevice(deviceId);
+        return;
+      }
+      targetDeviceId = deviceId;
+      setFollowDevice(deviceId);
+      renderDeviceList();
+      updateDetailCard();
+    });
+
     deviceList.appendChild(item);
   }
 }
@@ -449,11 +597,11 @@ function batteryClass(pct) {
 /* ============================================================ */
 
 function updateDetailCard() {
-  const d = deviceData[TARGET_DEVICE];
+  const d = deviceData[targetDeviceId];
   if (!d) return;
 
   const fresh = Date.now() - d.ts < DEVICE_TTL_MS;
-  devName.textContent = TARGET_DEVICE;
+  devName.textContent = targetDeviceId;
   devStatus.textContent = fresh ? "Đang hoạt động" : "Mất tín hiệu";
   devStatus.className = "device-status " + (fresh ? "online" : "offline");
 
@@ -470,7 +618,7 @@ function updateDetailCard() {
 }
 
 function updateDetailCardAddress() {
-  const d = deviceData[TARGET_DEVICE];
+  const d = deviceData[targetDeviceId];
   if (!d) return;
   reverseGeocode(d.lat, d.lng).then(addr => {
     const display = addr || `${d.lat.toFixed(6)}, ${d.lng.toFixed(6)}`;
@@ -484,7 +632,7 @@ function updateDetailCardAddress() {
 /* ============================================================ */
 
 setInterval(() => {
-  const d = deviceData[TARGET_DEVICE];
+  const d = deviceData[targetDeviceId];
   if (d) {
     const sec = Math.max(0, Math.floor((Date.now() - d.ts) / 1000));
     statTime.textContent = sec < 1 ? "Vừa xong" : `${sec}s trước`;
@@ -514,7 +662,7 @@ function fmtDistance(m) {
 
 function updateDistances() {
   if (!myPos) return;
-  const d = deviceData[TARGET_DEVICE];
+  const d = deviceData[targetDeviceId];
   if (d) statDistance.textContent = fmtDistance(haversine(myPos, [d.lat, d.lng]));
 }
 
@@ -543,7 +691,8 @@ async function sendCommand(command, btn) {
   btn.classList.add("loading");
   btn.disabled = true;
   try {
-    await set(ref(db, `devices/${TARGET_DEVICE}/command`), command);
+    if (!targetDeviceId) throw new Error("Chưa chọn thiết bị để điều khiển");
+    await set(ref(db, `devices/${targetDeviceId}/command`), command);
   } catch (err) {
     console.error(`[Command] Lỗi:`, err);
   } finally {

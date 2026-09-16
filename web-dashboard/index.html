@@ -50,6 +50,13 @@
           <div class="my-meta">
             <span id="myAccuracy">Đang xin phép vị trí...</span>
           </div>
+          <button id="btnFollowMe" class="follow-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M12 2v6M12 16v6M2 12h6M16 12h6"/>
+            </svg>
+            <span id="followMeLabel">Bám theo vị trí của tôi</span>
+          </button>
         </div>
 
         <!-- Danh sách thiết bị -->
@@ -146,6 +153,11 @@
 
     <!-- ========== MAP ========== -->
     <div id="map"></div>
+    <div id="followBadge" class="follow-badge" style="display:none">
+      <span class="follow-badge-dot"></span>
+      <span id="followBadgeText">Đang bám theo...</span>
+      <button id="btnUnfollow" class="follow-badge-close">&times;</button>
+    </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
